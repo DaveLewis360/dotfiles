@@ -1,0 +1,31 @@
+
+/* Caelestia Spotify PWA Theme */
+:root {
+    --caelestia-bg: #17130b;
+    --caelestia-primary: #f0be6d;
+    --caelestia-surface: #241f17;
+    --caelestia-text: #ece1d4;
+    --caelestia-glass: rgba(23, 19, 11, 0.6);
+}
+
+/* Teljes átlátszóság a Glass hatáshoz */
+body, #main, .Root__top-container, .Root__main-view, .Root__nav-bar {
+    background-color: transparent !important;
+    background: transparent !important;
+}
+
+/* Gombok és aktív elemek színezése */
+.encore-bright-accent-set, .x-progressBar-fillColor {
+    background-color: var(--caelestia-primary) !important;
+}
+
+/* Szövegek színezése */
+h1, h2, h3, span, div {
+    color: var(--caelestia-text) !important;
+}
+
+/* Navigációs sáv és egyéb elemek üvegesítése */
+.main-navBar-navBar, .main-nowPlayingBar-container {
+    background-color: var(--caelestia-glass) !important;
+    backdrop-filter: blur(20px);
+}

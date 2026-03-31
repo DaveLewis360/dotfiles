@@ -1,0 +1,5 @@
+2026/03/17-07:55:18.023 6644b Creating DB /home/dave/.config/caelestia/spotify-profile/Local Storage/leveldb since it was missing.
+2026/03/17-07:55:18.032 6644b Reusing MANIFEST /home/dave/.config/caelestia/spotify-profile/Local Storage/leveldb/MANIFEST-000001
+2026/03/17-07:58:18.293 6644b Level-0 table #5: started
+2026/03/17-07:58:18.295 6644b Level-0 table #5: 104121 bytes OK
+2026/03/17-07:58:18.298 6644b Delete type=0 #3

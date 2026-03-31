@@ -1,0 +1,103 @@
+/* Caelestia Messenger - Pure Transparent & No Glow (Ghostty/Zen Style) */
+:root {
+  --glass-accent: #cea379 !important;
+  --text-main: #ffffff !important;
+  --text-muted: #b3b3b3 !important;
+}
+
+/* 1. GLOBÁLIS ÁTLÁTSZÓSÁG KÉNYSZERÍTÉSE */
+body, html, #mount_0_0, ._9dls, ._6s5d {
+    background: transparent !important;
+    background-color: rgba(0, 0, 0, 0) !important;
+}
+
+body {
+    background-color: rgba(0, 0, 0, 0.3) !important;
+}
+
+/* 2. KÖNYÖRTELEN TRANSZPARENCIA (A chat felület fixálása) */
+div[style*="--messenger-card-background"],
+div[style*="--mwp-message-row-background"],
+div[style*="background-image"],
+div[style*="linear-gradient"],
+div[style*="--mwp-header-background-color"],
+div[style*="background-color: rgb(255, 255, 255)"],
+div[style*="background-color: #fff"],
+.x16sw7j7 {
+    background: transparent !important;
+    background-color: transparent !important;
+    background-image: none !important;
+    box-shadow: none !important;
+}
+
+/* Specifikus Messenger konténerek lenullázása */
+.x9f619.x1n2onr6.x1ja2u2z,
+.x78zum5.xdt5ytf.x1t2pt76.x1n2onr6.x1ja2u2z.x10cihs4,
+.x1qjc9v5 > .x1odjw0f,
+.x1qjc9v5 > .x9f619 > .x1n2onr6 > .x1ja2u2z,
+.x78zum5.x1a02dak.x139jcc6.xcud41i.x9otpla,
+[role="main"], [role="main"] > div, [role="banner"] {
+    background: transparent !important;
+    background-color: rgba(0, 0, 0, 0) !important;
+    border: none !important;
+}
+
+/* 3. RAGYOGÁS ÉS BLUR TILALOM */
+* {
+    text-shadow: none !important;
+    box-shadow: none !important;
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+}
+
+/* 4. PANELEK ELVÁLASZTÁSA (PONTOSÍTOTT) */
+
+/* CHAT LISTA (Sötétebb panel marad) */
+[aria-label="Thread list"], 
+[aria-label="Chats"],
+[aria-label="Beszélgetések"],
+[data-pagelet="MWInboxDetail_ThreadList"] {
+    background-color: rgba(0, 0, 0, 0.5) !important;
+    border-right: 1px solid rgba(255, 255, 255, 0.05) !important;
+    display: flex !important;
+}
+
+/* LEGSZÉLSŐ IKON SÁV (Legyen teljesen átlátszó) */
+/* Ez a sáv a legkülső navigációs elem */
+div[role="navigation"].x1iorvi4,
+div[role="navigation"].xjbqb8w,
+nav[role="navigation"] {
+    background-color: transparent !important;
+    background: transparent !important;
+    border-right: none !important;
+}
+
+/* Chat Input (Thread composer) */
+[aria-label="Thread composer"] {
+    background-color: rgba(0, 0, 0, 0.4) !important;
+    margin: 10px !important;
+    border-radius: 8px !important;
+}
+
+/* 5. ÜZENETEK ÉS SZÖVEGEK */
+span, p, h1, h2, h3, div[dir="auto"] {
+    color: var(--text-main) !important;
+}
+
+[role="heading"], [data-testid="thread-name"] {
+    color: var(--glass-accent) !important;
+}
+
+path, svg {
+    fill: var(--text-muted) !important;
+}
+
+/* Üzenet buborékok mattítása */
+div[data-testid="message-container"] > div > div {
+    background-color: rgba(255, 255, 255, 0.05) !important;
+}
+
+div[data-testid="outgoing_message"] > div > div {
+    background-color: rgba(206, 163, 121, 0.15) !important;
+    border-left: 2px solid var(--glass-accent) !important;
+}

@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+# Caelestia Spotify - Zen standalone mode
+# Ez a meglévő, kész Spotify profilodat használja, de appként indítja el.
+zen-browser --P Spotifyapp --class caelestia-spotify --new-window https://open.spotify.com

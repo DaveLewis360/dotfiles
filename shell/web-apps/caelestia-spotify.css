@@ -1,0 +1,59 @@
+/* --- LAYER 1: BASE ENCORE OVERRIDES --- */
+:root {
+    --background-base: transparent !important;
+    --background-highlight: rgba(255,255,255,0.05) !important;
+    --background-press: rgba(255,255,255,0.1) !important;
+    --background-elevated-base: rgba(0,0,0,0.3) !important;
+    --background-elevated-highlight: rgba(255,255,255,0.1) !important;
+}
+
+/* --- LAYER 2: ZEN INTERNET (OFFICIAL GITHUB RULES) --- */
+html,
+body,
+nav,
+header,
+[data-right-sidebar-hidden],
+[data-testid="global-nav-bar"],
+#Desktop_LeftSidebar_Id,
+nav[aria-label="Main"] > div,
+.YourLibraryX,
+.jEMA2gVoLgPQqAFrPhFw,
+.S4OmZ_IZexmZ5dasPqW5,
+#Desktop_PanelContainer_Id {
+  background-color: transparent !important;
+  background: none !important;
+  border: none !important;
+  box-shadow: none !important;
+}
+
+/* Remove footer and clutter */
+[data-testid="left-sidebar-footer"],
+.main-view-container__mh-footer-container,
+[data-testid="upgrade-button"],
+a[href="/download"] {
+  display: none !important;
+}
+
+/* Rounded now playing panel */
+#Desktop_PanelContainer_Id::before {
+  border-radius: 1em !important;
+}
+
+/* --- LAYER 3: USER CUSTOM (FROM DESKTOP STYLUS) --- */
+#main-view {
+    background-color: rgba(0, 0, 0, .5) !important;
+}
+
+main > div > div:first-child {
+    background-color: transparent !important;
+    background-image: none !important;
+}
+
+.LtqMCWXd5Nkemkym, .x_HLN829yDsvJDgl {
+    --background-base: rgba(0, 0, 0, 0.3) !important;
+}
+
+/* --- EXTRA: APP BACKGROUND TINT --- */
+body {
+    background-color: rgba(0, 0, 0, 0.2) !important; /* Base transparency for the whole window */
+}

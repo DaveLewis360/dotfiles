@@ -1,2 +1,26 @@
+# --- Build / interpreter artifacts ---
 __pycache__/
+*.pyc
 *.log
+node_modules/
+build/
+
+# --- Browser / app runtime caches (not config) ---
+**/Cache/
+**/Code Cache/
+**/GPUCache/
+**/DawnGraphiteCache/
+**/DawnWebGPUCache/
+**/Service Worker/
+**/CacheStorage/
+**/cache/
+shell/spotify-profile/
+shell/__pycache__/
+.config/ml4w/cache/
+
+# --- Large media (kept on disk, not versioned in git) ---
+*.mp4
+*.mkv
+*.webm
+*.iso
+*.AppImage

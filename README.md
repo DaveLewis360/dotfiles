@@ -1,37 +1,46 @@
-# 🌌 Caelestia Dynamic Dotfiles
+# dotfiles
 
-This repository contains my personalized, dynamically changing Arch Linux setup. The system is built upon the **Caelestia** ecosystem, enhanced with custom automation scripts for a unified visual experience.
+Personal Hyprland + **Caelestia** desktop configuration (Arch Linux).
 
-## 🚀 How it Works (The "Engine")
+This repo holds the *configuration & theming layer*. The Caelestia **shell program**
+itself lives in a separate fork (see below).
 
-The core of the system is wallpaper-based color generation. The process flows as follows:
+## Active layout
 
-1.  **Color Generation:** Caelestia extracts colors from the current wallpaper and saves them to `~/.local/state/caelestia/scheme.json`.
-2.  **GTK Sync:** The Caelestia core automatically updates GTK 3/4 themes and KDE globals.
-3.  **Post-Hook Automation:** The `shell/cli.json` configuration triggers the `scripts/update_css_vars.py` script after every change.
-4.  **App-Specific Updates:** `update_css_vars.py` updates the following:
-    *   **Vesktop (Discord):** Updates CSS variables for the glass effect.
-    *   **Ghostty:** Generates the current theme and adjusts background opacity.
-    *   **Spotify:** Injects colors via Spicetify bridge.
-    *   **ZSH:** Updates `sequences.txt` for instant terminal color synchronization.
+| Component | Symlink | Source |
+|---|---|---|
+| Hyprland | `~/.config/hypr` | `dotfiles/hypr` |
+| Caelestia shell **config** | `~/.config/caelestia` | `dotfiles/shell` |
+| Ghostty | `~/.config/ghostty/config` | `dotfiles/apps/ghostty/config` |
+| pywal | `~/.config/wal` | `dotfiles/.config/wal` |
+| waypaper / xsettingsd / wallust / vim | `~/.config/*` | `dotfiles/.config/*` |
+| Xresources | `~/.Xresources` | `dotfiles/.Xresources` |
 
-## 📁 Structure
+> The Caelestia **shell program** (the running QML) is a separate repository:
+> `~/.config/quickshell/caelestia` → `~/Reference/my-caelestia-shell`
+> (fork of `caelestia-dots/shell`, with local customizations). `install.sh` does
+> **not** touch it.
 
-*   `hypr/`: Hyprland window manager configurations (modular structure).
-*   `shell/`: Caelestia Shell (Quickshell) QML files and settings.
-*   `scripts/`: Python and Bash scripts for synchronization.
-*   `apps/`: Application-specific configs (Ghostty, nwg-look, etc.).
-*   `themes/`: Custom CSS templates and stylesheets.
+## Install
 
-## 🛠️ Essential Commands
+```bash
+git clone <this-repo> ~/dotfiles
+cd ~/dotfiles
+./install.sh   # idempotent; only creates/refreshes symlinks, never overwrites real files
+```
 
-*   `~/Reference/switch_shell.sh mine`: Switch back to your stable custom setup.
-*   `~/Reference/switch_shell.sh caelestia`: Run the official Caelestia reference shell.
-*   `~/Reference/switch_shell.sh noctalia`: Run the official Noctalia reference shell.
+## Structure
 
-## 📋 Dependencies
+- `hypr/` — Hyprland config (core, appearance, scripts, wallpapers)
+- `shell/` — Caelestia shell config (`shell.json`, `cli.json`, user overrides)
+- `apps/` — per-app configs (ghostty, vesktop, zen)
+- `scripts/` — helper scripts
+- `.config/` — additional XDG configs (ML4W-derived: waypaper, wallust, vim, …)
 
-*   `quickshell-git`: The UI engine.
-*   `python3`: For running synchronization scripts.
-*   `inotify-tools`: For monitoring file changes.
-*   `grim / slurp`: For screenshots and visual verification.
+## Notes
+
+- Generated caches, browser-profile data and large media (`*.mp4`, …) are
+  git-ignored on purpose (see `.gitignore`) — they stay on disk but are not versioned.
+- Related repos on this machine: `Reference/caelestia-shell` (pristine upstream),
+  `Reference/my-caelestia-shell` (active fork), `Archivum/.dotfiles` (holman framework,
+  source of `~/.gitconfig`, `~/.vimrc`, …).

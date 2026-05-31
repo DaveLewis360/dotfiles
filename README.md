@@ -18,8 +18,10 @@ itself lives in a separate fork (see below).
 
 > The Caelestia **shell program** (the running QML) is a separate repository:
 > `~/.config/quickshell/caelestia` → `~/Reference/my-caelestia-shell`
-> (fork of `caelestia-dots/shell`, with local customizations). `install.sh` does
-> **not** touch it.
+> — a fork of `caelestia-dots/shell` at **github.com/DaveLewis360/shell** (local
+> customizations incl. native video wallpapers). This `~/dotfiles/shell` folder holds
+> only the *user config* (`shell.json`, `cli.json`, …), not the program. `install.sh`
+> does **not** touch the program symlink.
 
 ## Install
 

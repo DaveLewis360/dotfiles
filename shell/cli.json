@@ -39,5 +39,13 @@
         ]
       }
     }
+  },
+  "record": {
+    "extraArgs": [
+      "-k",
+      "hevc",
+      "-a",
+      "default_output|default_input"
+    ]
   }
 }

@@ -18,12 +18,12 @@ Item {
 
     Image {
         anchors.fill: parent
-        source: Players.active?.trackArtUrl ?? ""
+        source: (Players.active?.trackArtUrl || Players.lastArtUrl) ?? ""
 
         asynchronous: true
         fillMode: Image.PreserveAspectCrop
-        sourceSize.width: width
-        sourceSize.height: height
+        // sourceSize.width: width
+        // sourceSize.height: height
 
         layer.enabled: true
         layer.effect: OpacityMask {

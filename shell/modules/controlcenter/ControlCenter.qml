@@ -1,12 +1,12 @@
 pragma ComponentBehavior: Bound
 
+import QtQuick
+import QtQuick.Layouts
+import Quickshell
 import qs.components
 import qs.components.controls
 import qs.services
 import qs.config
-import Quickshell
-import QtQuick
-import QtQuick.Layouts
 
 Item {
     id: root
@@ -18,6 +18,7 @@ Item {
     property alias active: session.active
     property alias navExpanded: session.navExpanded
 
+    readonly property bool initialOpeningComplete: panes.initialOpeningComplete
     readonly property Session session: Session {
         id: session
 
@@ -29,14 +30,6 @@ Item {
 
     implicitWidth: implicitHeight * Config.controlCenter.sizes.ratio
     implicitHeight: screen.height * Config.controlCenter.sizes.heightMult
-
-    // Global background for the entire Control Center
-    StyledRect {
-        anchors.fill: parent
-        color: Colours.glassBackground
-        radius: root.rounding
-        z: -1
-    }
 
     GridLayout {
         anchors.fill: parent
@@ -50,6 +43,7 @@ Item {
             Layout.fillWidth: true
             Layout.columnSpan: 2
 
+            asynchronous: true
             active: root.floating
             visible: active
 
@@ -68,8 +62,6 @@ Item {
             color: Colours.tPalette.m3surfaceContainer
 
             CustomMouseArea {
-                anchors.fill: parent
-
                 function onWheel(event: WheelEvent): void {
                     // Prevent tab switching during initial opening animation to avoid blank pages
                     if (!panes.initialOpeningComplete) {
@@ -81,6 +73,8 @@ Item {
                     else if (event.angleDelta.y > 0)
                         root.session.activeIndex = Math.max(root.session.activeIndex - 1, 0);
                 }
+
+                anchors.fill: parent
             }
 
             NavRail {
@@ -103,6 +97,4 @@ Item {
             session: root.session
         }
     }
-
-    readonly property bool initialOpeningComplete: panes.initialOpeningComplete
 }

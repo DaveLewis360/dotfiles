@@ -2,16 +2,16 @@ pragma ComponentBehavior: Bound
 
 import ".."
 import "../components"
+import QtQuick
+import QtQuick.Layouts
+import Quickshell.Bluetooth
 import qs.components
+import qs.components.containers
 import qs.components.controls
 import qs.components.effects
-import qs.components.containers
 import qs.services
 import qs.config
 import qs.utils
-import Quickshell.Bluetooth
-import QtQuick
-import QtQuick.Layouts
 
 StyledFlickable {
     id: root
@@ -241,13 +241,13 @@ StyledFlickable {
                                         scale: root.session.bt.editingDeviceName ? 1 : 0.5
 
                                         StateLayer {
-                                            color: Colours.palette.m3onSecondaryContainer
-                                            disabled: !root.session.bt.editingDeviceName
-
                                             function onClicked(): void {
                                                 root.session.bt.editingDeviceName = false;
                                                 deviceNameEdit.text = Qt.binding(() => root.device?.name ?? "");
                                             }
+
+                                            color: Colours.palette.m3onSecondaryContainer
+                                            disabled: !root.session.bt.editingDeviceName
                                         }
 
                                         MaterialIcon {
@@ -279,8 +279,6 @@ StyledFlickable {
                                         color: Qt.alpha(Colours.palette.m3primary, root.session.bt.editingDeviceName ? 1 : 0)
 
                                         StateLayer {
-                                            color: root.session.bt.editingDeviceName ? Colours.palette.m3onPrimary : Colours.palette.m3onSurface
-
                                             function onClicked(): void {
                                                 root.session.bt.editingDeviceName = !root.session.bt.editingDeviceName;
                                                 if (root.session.bt.editingDeviceName)
@@ -288,6 +286,8 @@ StyledFlickable {
                                                 else
                                                     deviceNameEdit.accepted();
                                             }
+
+                                            color: root.session.bt.editingDeviceName ? Colours.palette.m3onPrimary : Colours.palette.m3onSurface
                                         }
 
                                         MaterialIcon {
@@ -358,17 +358,12 @@ StyledFlickable {
                                 }
 
                                 RowLayout {
+                                    id: batteryPercent
+
                                     Layout.topMargin: Appearance.spacing.small / 2
                                     Layout.fillWidth: true
                                     Layout.preferredHeight: Appearance.padding.smaller
                                     spacing: Appearance.spacing.small / 2
-
-                                    StyledRect {
-                                        Layout.fillHeight: true
-                                        implicitWidth: root.device?.batteryAvailable ? parent.width * root.device.battery : 0
-                                        radius: Appearance.rounding.full
-                                        color: Colours.palette.m3primary
-                                    }
 
                                     StyledRect {
                                         Layout.fillWidth: true
@@ -377,12 +372,12 @@ StyledFlickable {
                                         color: Colours.palette.m3secondaryContainer
 
                                         StyledRect {
-                                            anchors.right: parent.right
+                                            anchors.left: parent.left
                                             anchors.top: parent.top
                                             anchors.bottom: parent.bottom
                                             anchors.margins: parent.height * 0.25
 
-                                            implicitWidth: height
+                                            implicitWidth: root.device?.batteryAvailable ? batteryPercent.width * root.device.battery : 0
                                             radius: Appearance.rounding.full
                                             color: Colours.palette.m3primary
                                         }
@@ -635,11 +630,11 @@ StyledFlickable {
             StateLayer {
                 id: fabState
 
-                color: root.session.bt.fabMenuOpen ? Colours.palette.m3onPrimary : Colours.palette.m3onPrimaryContainer
-
                 function onClicked(): void {
                     root.session.bt.fabMenuOpen = !root.session.bt.fabMenuOpen;
                 }
+
+                color: root.session.bt.fabMenuOpen ? Colours.palette.m3onPrimary : Colours.palette.m3onPrimaryContainer
             }
 
             MaterialIcon {

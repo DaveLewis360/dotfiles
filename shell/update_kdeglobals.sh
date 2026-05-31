@@ -80,8 +80,11 @@ EOF
 
 # Initial update (ensure sync on start)
 update_kde
+python3 "$HOME/dotfiles/scripts/update_css_vars.py"
 
 # Watch for changes (using close_write which is more reliable for file overwrites)
+export CAELESTIA_WATCHER=1
 while inotifywait -e close_write "$SCHEME_FILE"; do
     update_kde
+    python3 "$HOME/dotfiles/scripts/update_css_vars.py"
 done

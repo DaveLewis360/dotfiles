@@ -3,9 +3,27 @@ import Quickshell.Io
 JsonObject {
     property bool enabled: true
     property bool showOnHover: true
-    property int mediaUpdateInterval: 500
+    property int mediaUpdateInterval: 1000
+    property int resourceUpdateInterval: 1000
     property int dragThreshold: 50
+
+    // Tabs
+    property bool showDashboard: true
+    property bool showMedia: true
+    property bool showPerformance: true
+    property bool showWeather: true
+
+    property Performance performance: Performance {}
     property Sizes sizes: Sizes {}
+
+    component Performance: JsonObject {
+        property bool showBattery: false
+        property bool showGpu: true
+        property bool showCpu: true
+        property bool showMemory: true
+        property bool showStorage: true
+        property bool showNetwork: true
+    }
 
     component Sizes: JsonObject {
         readonly property int tabIndicatorHeight: 3

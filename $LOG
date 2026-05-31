@@ -1,0 +1,21 @@
+[32m  INFO[0m: Launching config: "/home/dave/.config/quickshell/caelestia/shell.qml"
+[32m  INFO[0m: Shell ID: "a991f9a9849fd3c4962116f244aa347e" Path ID "a991f9a9849fd3c4962116f244aa347e"
+[32m  INFO[0m: Saving logs to "/run/user/1000/quickshell/by-id/jbp87k9wet/log.qslog"
+[33m  WARN[97m qt.qml.propertyCache.append[0m: Member data of the object ClippingRectangle_QMLTYPE_132 overrides a member of the base object. Consider renaming it or adding final or override specifier
+[33m  WARN[97m qt.qml.propertyCache.append[0m: Member implicitWidth of the object ClippingWrapperRectangle_QMLTYPE_194 overrides a member of the base object. Consider renaming it or adding final or override specifier
+[33m  WARN[97m qt.qml.propertyCache.append[0m: Member implicitHeight of the object ClippingWrapperRectangle_QMLTYPE_194 overrides a member of the base object. Consider renaming it or adding final or override specifier
+[33m  WARN[97m qt.qml.propertyCache.append[0m: Member implicitWidth of the object WrapperItem_QMLTYPE_259 overrides a member of the base object. Consider renaming it or adding final or override specifier
+[33m  WARN[97m qt.qml.propertyCache.append[0m: Member implicitHeight of the object WrapperItem_QMLTYPE_259 overrides a member of the base object. Consider renaming it or adding final or override specifier
+[33m  WARN[97m qt.qml.propertyCache.append[0m: Member implicitWidth of the object StyledInputField_QMLTYPE_373 overrides a member of the base object. Consider renaming it or adding final or override specifier
+[33m  WARN[97m qt.qml.propertyCache.append[0m: Member enabled of the object StyledInputField_QMLTYPE_373 overrides a member of the base object. Consider renaming it or adding final or override specifier
+[33m  WARN[97m qt.qml.propertyCache.append[0m: Member implicitWidth of the object WrapperMouseArea_QMLTYPE_483 overrides a member of the base object. Consider renaming it or adding final or override specifier
+[33m  WARN[97m qt.qml.propertyCache.append[0m: Member implicitHeight of the object WrapperMouseArea_QMLTYPE_483 overrides a member of the base object. Consider renaming it or adding final or override specifier
+[33m  WARN[97m qt.qml.propertyCache.append[0m: Member enabled of the object WrappedLoader overrides a member of the base object. Consider renaming it or adding final or override specifier
+[31m ERROR[0m: Failed to load configuration
+[31m ERROR[0m:   caused by @shell.qml[13:5]: Type Background unavailable
+[31m ERROR[0m:   caused by @modules/background/Background.qml[38:17]: Type Wallpaper unavailable
+[31m ERROR[0m:   caused by @modules/background/Wallpaper.qml[75:25]: Type FileDialog unavailable
+[31m ERROR[0m:   caused by @components/filedialog/FileDialog.qml[82:17]: Type FolderContents unavailable
+[31m ERROR[0m:   caused by @components/filedialog/FolderContents.qml[143:13]: Type CachingIconImage unavailable
+[31m ERROR[0m:   caused by @components/images/CachingIconImage.qml[28:9]: Type CachingImage unavailable
+[31m ERROR[0m:   caused by @components/images/CachingImage.qml[22:5]: CachingImageManager is not a type

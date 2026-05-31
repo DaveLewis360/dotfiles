@@ -34,6 +34,7 @@ Row {
     property color disabledTextColour: Qt.alpha(Colours.palette.m3onSurface, 0.38)
 
     spacing: Math.floor(Appearance.spacing.small / 2)
+    z: root.expanded ? 100 : 0
 
     StyledRect {
         radius: implicitHeight / 2 * Math.min(1, Appearance.rounding.scale)
@@ -109,14 +110,14 @@ Row {
         StateLayer {
             id: expandStateLayer
 
+            function onClicked(): void {
+                root.expanded = !root.expanded;
+            }
+
             rect.topLeftRadius: parent.topLeftRadius
             rect.bottomLeftRadius: parent.bottomLeftRadius
             color: root.textColour
             disabled: root.disabled
-
-            function onClicked(): void {
-                root.expanded = !root.expanded;
-            }
         }
 
         MaterialIcon {

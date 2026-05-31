@@ -1,21 +1,21 @@
-#!/usr/bin/env fish
+#!/usr/bin/env sh
 
-if test "$argv[1]" = '-g'
-    set group
-    set -e $argv[1]
-end
+if [ "$1" = '-g' ]; then
+    group=1
+    shift
+fi
 
-if test (count $argv) -ne 2
+if [ $# -ne 2 ]; then
     echo 'Wrong number of arguments. Usage: ./wsaction.fish [-g] <dispatcher> <workspace>'
     exit 1
-end
+fi
 
-set -l active_ws (hyprctl activeworkspace -j | jq -r '.id')
+active_ws=$(hyprctl activeworkspace -j | awk -F'"id":' '{print int($2); exit}')
 
-if set -q group
-    # Move to group
-    hyprctl dispatch $argv[1] (math "($argv[2] - 1) * 10 + $active_ws % 10")
+if [ -n "$group" ]; then
+    target=$(( ($2 - 1) * 10 + active_ws % 10 ))
 else
-    # Move to ws in group
-    hyprctl dispatch $argv[1] (math "floor(($active_ws - 1) / 10) * 10 + $argv[2]")
-end
+    target=$(( (active_ws - 1) / 10 * 10 + $2 ))
+fi
+
+hyprctl dispatch "$1" "$target"

@@ -12,8 +12,9 @@ Singleton {
     id: root
 
     readonly property list<MprisPlayer> list: Mpris.players.values
-    readonly property MprisPlayer active: props.manualActive ?? list.find(p => getIdentity(p) === Config.services.defaultPlayer) ?? list[0] ?? null
-    property alias manualActive: props.manualActive
+    readonly property MprisPlayer active: (manualActiveName ? list.find(p => p.identity === manualActiveName) : null) ?? list.find(p => getIdentity(p) === Config.services.defaultPlayer) ?? list[0] ?? null
+    property alias manualActiveName: props.manualActiveName
+    property string lastArtUrl: ""
 
     function getIdentity(player: MprisPlayer): string {
         const alias = Config.services.playerAliases.find(a => a.from === player.identity);
@@ -22,6 +23,18 @@ Singleton {
 
     Connections {
         target: active
+
+        function onTrackArtUrlChanged() {
+            if (active && active.trackArtUrl != "") {
+                root.lastArtUrl = active.trackArtUrl;
+            }
+        }
+
+        function onTrackTitleChanged() {
+            // Reset cache if track changed but no art URL yet, 
+            // but usually we want to keep it until the new one arrives or stays empty.
+            // For now, let's just let it update.
+        }
 
         function onPostTrackChanged() {
             if (!Config.utilities.toasts.nowPlaying) {
@@ -36,7 +49,7 @@ Singleton {
     PersistentProperties {
         id: props
 
-        property MprisPlayer manualActive
+        property string manualActiveName
 
         reloadableId: "players"
     }

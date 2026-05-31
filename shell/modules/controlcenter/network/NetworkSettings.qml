@@ -2,15 +2,15 @@ pragma ComponentBehavior: Bound
 
 import ".."
 import "../components"
-import qs.components
-import qs.components.controls
-import qs.components.containers
-import qs.components.effects
-import qs.services
-import qs.config
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
+import qs.components
+import qs.components.containers
+import qs.components.controls
+import qs.components.effects
+import qs.services
+import qs.config
 
 ColumnLayout {
     id: root
@@ -148,7 +148,7 @@ ColumnLayout {
         closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
 
         background: StyledRect {
-            color: Colours.glassBackground
+            color: Colours.palette.m3surface
             radius: Appearance.rounding.large
         }
 

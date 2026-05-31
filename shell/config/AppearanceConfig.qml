@@ -80,6 +80,9 @@ JsonObject {
     }
 
     component Anim: JsonObject {
+        // Adopted from upstream
+        property real mediaGifSpeedAdjustment: 300
+        property real sessionGifSpeed: 0.7
         property AnimCurves curves: AnimCurves {}
         property AnimDurations durations: AnimDurations {}
     }
@@ -88,6 +91,7 @@ JsonObject {
         property bool enabled: false
         property real base: 0.85
         property real layers: 0.4
+        // Custom variable for external app sync
         property string appBackground: "#000000"
     }
 }

@@ -99,6 +99,7 @@ Item {
             text: "art_track"
             color: Colours.palette.m3onSurfaceVariant
             font.pointSize: (parent.width * 0.4) || 1
+            visible: image.status != Image.Ready
         }
 
         Image {
@@ -106,11 +107,11 @@ Item {
 
             anchors.fill: parent
 
-            source: Players.active?.trackArtUrl ?? ""
+            source: (Players.active?.trackArtUrl || Players.lastArtUrl) ?? ""
             asynchronous: true
             fillMode: Image.PreserveAspectCrop
-            sourceSize.width: width
-            sourceSize.height: height
+            // sourceSize.width: width
+            // sourceSize.height: height
         }
     }
 

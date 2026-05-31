@@ -189,7 +189,14 @@ Item {
                             }
                             StyledClippingRect {
                                 id: cover; anchors.centerIn: parent; width: 34; height: 34; radius: 17; color: Colours.palette.m3surfaceContainer
-                                Image { anchors.fill: parent; source: Players.active?.trackArtUrl ?? ""; fillMode: Image.PreserveAspectCrop }
+                                MaterialIcon {
+                                    anchors.centerIn: parent
+                                    text: "music_note"
+                                    font.pointSize: 14
+                                    color: Colours.palette.m3onSurfaceVariant
+                                    visible: image.status != Image.Ready
+                                }
+                                Image { id: image; anchors.fill: parent; source: (Players.active?.trackArtUrl || Players.lastArtUrl) ?? ""; fillMode: Image.PreserveAspectCrop }
                             }
                         }
 

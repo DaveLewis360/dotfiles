@@ -1,12 +1,13 @@
 pragma Singleton
 pragma ComponentBehavior: Bound
 
-import qs.config
-import qs.utils
-import Caelestia
+import QtQuick
 import Quickshell
 import Quickshell.Io
-import QtQuick
+import Caelestia
+import Caelestia.Config
+import qs.services
+import qs.utils
 
 Singleton {
     id: root
@@ -24,9 +25,7 @@ Singleton {
     readonly property Transparency transparency: Transparency {}
     readonly property alias wallLuminance: analyser.luminance
 
-    // Unified background color for all glass elements (Bar, Panels, Popouts)
-    // Using m3surface with a fixed alpha to ensure consistency regardless of layering
-    readonly property color glassBackground: Qt.rgba(palette.m3surface.r, palette.m3surface.g, palette.m3surface.b, 0.6)
+    readonly property color glassBackground: Qt.rgba(palette.m3surface.r, palette.m3surface.g, palette.m3surface.b, transparency.base)
 
     function getLuminance(c: color): real {
         if (c.r == 0 && c.g == 0 && c.b == 0)
@@ -83,6 +82,21 @@ Singleton {
         Quickshell.execDetached(["caelestia", "scheme", "set", "--notify", "-m", mode]);
     }
 
+    function reloadHyprRules(): void {
+        const str = "keyword layerrule %1 %2, match:namespace caelestia-drawers";
+        Hypr.extras.batchMessage([str.arg("blur").arg(transparency.enabled ? 1 : 0), str.arg("ignore_alpha").arg(transparency.base - 0.03)]);
+    }
+
+    Component.onCompleted: debounceTimer.triggered()
+
+    Connections {
+        function onConfigReloaded(): void {
+            root.reloadHyprRules();
+        }
+
+        target: Hypr
+    }
+
     FileView {
         path: `${Paths.state}/scheme.json`
         watchChanges: true
@@ -93,13 +107,23 @@ Singleton {
     ImageAnalyser {
         id: analyser
 
-        source: Wallpapers.current
+        source: Wallpapers.currentIsVideo ? "/tmp/video_thumb.jpg" : Wallpapers.current
+    }
+
+    Timer {
+        id: debounceTimer
+
+        interval: 300
+        onTriggered: root.reloadHyprRules()
     }
 
     component Transparency: QtObject {
-        readonly property bool enabled: Appearance.transparency.enabled
-        readonly property real base: Appearance.transparency.base - (root.light ? 0.1 : 0)
-        readonly property real layers: Appearance.transparency.layers
+        readonly property bool enabled: Tokens.transparency.enabled
+        readonly property real base: Math.max(0, Math.min(1, Tokens.transparency.base - (root.light ? 0.1 : 0)))
+        readonly property real layers: Tokens.transparency.layers
+
+        onEnabledChanged: debounceTimer.restart()
+        onBaseChanged: debounceTimer.restart()
     }
 
     component M3TPalette: QtObject {

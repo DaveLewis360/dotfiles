@@ -18,6 +18,7 @@ Item {
 
     implicitHeight: bar.implicitHeight + indicator.implicitHeight + indicator.anchors.topMargin + separator.implicitHeight
 
+    // More robust tab visibility logic
     TabBar {
         id: bar
 
@@ -31,29 +32,38 @@ Item {
         onCurrentIndexChanged: root.state.currentTab = currentIndex
 
         Tab {
+            id: dashTab
+            visible: Config.dashboard.showDashboard
             iconName: "dashboard"
             text: qsTr("Dashboard")
+            width: visible ? (root.nonAnimWidth / bar.visibleCount) : 0
         }
 
         Tab {
+            id: mediaTab
+            visible: Config.dashboard.showMedia
             iconName: "queue_music"
             text: qsTr("Media")
+            width: visible ? (root.nonAnimWidth / bar.visibleCount) : 0
         }
 
         Tab {
+            id: perfTab
+            visible: Config.dashboard.showPerformance
             iconName: "speed"
             text: qsTr("Performance")
+            width: visible ? (root.nonAnimWidth / bar.visibleCount) : 0
         }
 
         Tab {
+            id: weatherTab
+            visible: Config.dashboard.showWeather
             iconName: "cloud"
             text: qsTr("Weather")
+            width: visible ? (root.nonAnimWidth / bar.visibleCount) : 0
         }
 
-        // Tab {
-        //     iconName: "workspaces"
-        //     text: qsTr("Workspaces")
-        // }
+        readonly property int visibleCount: (dashTab.visible ? 1 : 0) + (mediaTab.visible ? 1 : 0) + (perfTab.visible ? 1 : 0) + (weatherTab.visible ? 1 : 0)
     }
 
     Item {
@@ -62,13 +72,19 @@ Item {
         anchors.top: bar.bottom
         anchors.topMargin: Config.dashboard.sizes.tabIndicatorSpacing
 
-        implicitWidth: bar.currentItem.implicitWidth
+        implicitWidth: bar.currentItem ? bar.currentItem.implicitWidth : 0
         implicitHeight: Config.dashboard.sizes.tabIndicatorHeight
 
+        // Correct X calculation based on visible items
         x: {
-            const tab = bar.currentItem;
-            const width = (root.nonAnimWidth - bar.spacing * (bar.count - 1)) / bar.count;
-            return width * tab.TabBar.index + (width - tab.implicitWidth) / 2;
+            if (!bar.currentItem) return 0;
+            let offset = 0;
+            for (let i = 0; i < bar.currentIndex; i++) {
+                if (bar.contentModel.get(i).visible) {
+                    offset += root.nonAnimWidth / bar.visibleCount;
+                }
+            }
+            return offset + (root.nonAnimWidth / bar.visibleCount - bar.currentItem.implicitWidth) / 2;
         }
 
         clip: true
@@ -117,96 +133,28 @@ Item {
             cursorShape: Qt.PointingHandCursor
 
             onPressed: event => {
-                root.state.currentTab = tab.TabBar.index;
-
-                const stateY = bgWrapper.y;
-                bgRippleAnim.x = event.x;
-                bgRippleAnim.y = event.y - stateY;
-
-                const dist = (ox, oy) => ox * ox + oy * oy;
-                bgRippleAnim.radius = Math.sqrt(Math.max(dist(event.x, event.y + stateY), dist(event.x, bgWrapper.height - event.y), dist(width - event.x, event.y + stateY), dist(width - event.x, bgWrapper.height - event.y)));
-
-                bgRippleAnim.restart();
+                bar.currentIndex = tab.TabBar.index;
             }
 
-            function onWheel(event: WheelEvent): void {
-                if (event.angleDelta.y < 0)
-                    root.state.currentTab = Math.min(root.state.currentTab + 1, bar.count - 1);
-                else if (event.angleDelta.y > 0)
-                    root.state.currentTab = Math.max(root.state.currentTab - 1, 0);
-            }
-
-            ClippingRectangle {
+            StyledClippingRect {
                 id: bgWrapper
 
                 anchors.fill: parent
                 implicitHeight: parent.height + Config.dashboard.sizes.tabIndicatorSpacing * 2
 
                 color: "transparent"
-                radius: Appearance.rounding.small
+                radius: Appearance.rounding.normal
 
                 StyledRect {
                     anchors.fill: parent
+                    radius: parent.radius
 
                     color: tab.current ? Colours.palette.m3primary : Colours.palette.m3onSurface
-                    opacity: parent.parent.pressed ? 0.1 : parent.parent.containsMouse ? 0.08 : 0
+                    opacity: mouse.pressed ? 0.1 : mouse.containsMouse ? 0.08 : 0
 
                     Behavior on opacity {
                         Anim {}
                     }
-                }
-
-                StyledRect {
-                    id: bgRipple
-
-                    radius: Appearance.rounding.full
-                    color: tab.current ? Colours.palette.m3primary : Colours.palette.m3onSurface
-                    opacity: 0
-
-                    transform: Translate {
-                        x: -bgRipple.width / 2
-                        y: -bgRipple.height / 2
-                    }
-                }
-            }
-
-            SequentialAnimation {
-                id: bgRippleAnim
-
-                property real x
-                property real y
-                property real radius
-
-                PropertyAction {
-                    target: bgRipple
-                    property: "x"
-                    value: bgRippleAnim.x
-                }
-                PropertyAction {
-                    target: bgRipple
-                    property: "y"
-                    value: bgRippleAnim.y
-                }
-                PropertyAction {
-                    target: bgRipple
-                    property: "opacity"
-                    value: 0.08
-                }
-                Anim {
-                    target: bgRipple
-                    properties: "implicitWidth,implicitHeight"
-                    from: 0
-                    to: bgRippleAnim.radius * 2
-                    duration: Appearance.anim.durations.normal
-                    easing.bezierCurve: Appearance.anim.curves.standardDecel
-                }
-                Anim {
-                    target: bgRipple
-                    property: "opacity"
-                    to: 0
-                    duration: Appearance.anim.durations.normal
-                    easing.type: Easing.BezierSpline
-                    easing.bezierCurve: Appearance.anim.curves.standard
                 }
             }
         }
@@ -215,113 +163,21 @@ Item {
             implicitWidth: Math.max(icon.width, label.width)
             implicitHeight: icon.height + label.height
 
-            function onWheel(event: WheelEvent): void {
-                if (event.angleDelta.y < 0)
-                    root.state.currentTab = Math.min(root.state.currentTab + 1, bar.count - 1);
-                else if (event.angleDelta.y > 0)
-                    root.state.currentTab = Math.max(root.state.currentTab - 1, 0);
-            }
-
-            SequentialAnimation {
-                id: rippleAnim
-
-                property real x
-                property real y
-                property real radius
-
-                PropertyAction {
-                    target: ripple
-                    property: "x"
-                    value: rippleAnim.x
-                }
-                PropertyAction {
-                    target: ripple
-                    property: "y"
-                    value: rippleAnim.y
-                }
-                PropertyAction {
-                    target: ripple
-                    property: "opacity"
-                    value: 0.08
-                }
-                Anim {
-                    target: ripple
-                    properties: "implicitWidth,implicitHeight"
-                    from: 0
-                    to: rippleAnim.radius * 2
-                    duration: Appearance.anim.durations.normal
-                    easing.bezierCurve: Appearance.anim.curves.standardDecel
-                }
-                Anim {
-                    target: ripple
-                    property: "opacity"
-                    to: 0
-                    duration: Appearance.anim.durations.normal
-                    easing.type: Easing.BezierSpline
-                    easing.bezierCurve: Appearance.anim.curves.standard
-                }
-            }
-
-            ClippingRectangle {
-                id: stateWrapper
-
-                anchors.left: parent.left
-                anchors.right: parent.right
-                anchors.verticalCenter: parent.verticalCenter
-                implicitHeight: parent.height + Config.dashboard.sizes.tabIndicatorSpacing * 2
-
-                color: "transparent"
-                radius: Appearance.rounding.small
-
-                StyledRect {
-                    id: stateLayer
-
-                    anchors.fill: parent
-
-                    color: tab.current ? Colours.palette.m3primary : Colours.palette.m3onSurface
-                    opacity: mouse.pressed ? 0.1 : tab.hovered ? 0.08 : 0
-
-                    Behavior on opacity {
-                        Anim {}
-                    }
-                }
-
-                StyledRect {
-                    id: ripple
-
-                    radius: Appearance.rounding.full
-                    color: tab.current ? Colours.palette.m3primary : Colours.palette.m3onSurface
-                    opacity: 0
-
-                    transform: Translate {
-                        x: -ripple.width / 2
-                        y: -ripple.height / 2
-                    }
-                }
-            }
-
             MaterialIcon {
                 id: icon
-
                 anchors.horizontalCenter: parent.horizontalCenter
                 anchors.bottom: label.top
-
                 text: tab.iconName
                 color: tab.current ? Colours.palette.m3primary : Colours.palette.m3onSurfaceVariant
                 fill: tab.current ? 1 : 0
                 font.pointSize: Appearance.font.size.large
-
-                Behavior on fill {
-                    Anim {}
-                }
+                Behavior on fill { Anim {} }
             }
 
             StyledText {
                 id: label
-
                 anchors.horizontalCenter: parent.horizontalCenter
                 anchors.bottom: parent.bottom
-
                 text: tab.text
                 color: tab.current ? Colours.palette.m3primary : Colours.palette.m3onSurfaceVariant
             }

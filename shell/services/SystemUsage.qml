@@ -20,13 +20,16 @@ Singleton {
     property real storageUsed
     property real storageTotal
     property real storagePerc: storageTotal > 0 ? storageUsed / storageTotal : 0
+    property var disks: []
+    property string cpuName: ""
+    property string gpuName: ""
 
     property real lastCpuIdle
     property real lastCpuTotal
 
     property int refCount
 
-    function formatKib(kib: real): var {
+    function formatKib(kib: real) {
         const mib = 1024;
         const gib = 1024 ** 2;
         const tib = 1024 ** 3;
@@ -59,6 +62,7 @@ Singleton {
         triggeredOnStart: true
         onTriggered: {
             stat.reload();
+            cpuinfo.reload();
             meminfo.reload();
             storage.running = true;
             gpuUsage.running = true;
@@ -71,19 +75,40 @@ Singleton {
 
         path: "/proc/stat"
         onLoaded: {
-            const data = text().match(/^cpu\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+)/);
-            if (data) {
-                const stats = data.slice(1).map(n => parseInt(n, 10));
-                const total = stats.reduce((a, b) => a + b, 0);
-                const idle = stats[3] + (stats[4] ?? 0);
+            const content = text();
+            if (!content) return;
+            const match = content.match(/^cpu\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+)/);
+            if (match) {
+                const stats = match.slice(1).map(function(n) { return parseInt(n, 10) || 0; });
+                if (stats.length >= 4) {
+                    const total = stats.reduce(function(a, b) { return a + b; }, 0);
+                    const idle = stats[3] + (stats[4] || 0);
 
-                const totalDiff = total - root.lastCpuTotal;
-                const idleDiff = idle - root.lastCpuIdle;
-                root.cpuPerc = totalDiff > 0 ? (1 - idleDiff / totalDiff) : 0;
+                    const totalDiff = total - root.lastCpuTotal;
+                    const idleDiff = idle - root.lastCpuIdle;
+                    
+                    if (totalDiff > 0)
+                        root.cpuPerc = 1 - idleDiff / totalDiff;
+                    else
+                        root.cpuPerc = 0;
 
-                root.lastCpuTotal = total;
-                root.lastCpuIdle = idle;
+                    root.lastCpuTotal = total;
+                    root.lastCpuIdle = idle;
+                }
             }
+        }
+    }
+
+    FileView {
+        id: cpuinfo
+
+        path: "/proc/cpuinfo"
+        onLoaded: {
+            const content = text();
+            if (!content) return;
+            const match = content.match(/model name\s+:\s+(.*)/);
+            if (match && match.length >= 2)
+                root.cpuName = match[1].trim();
         }
     }
 
@@ -93,49 +118,68 @@ Singleton {
         path: "/proc/meminfo"
         onLoaded: {
             const data = text();
-            root.memTotal = parseInt(data.match(/MemTotal: *(\d+)/)[1], 10) || 1;
-            root.memUsed = (root.memTotal - parseInt(data.match(/MemAvailable: *(\d+)/)[1], 10)) || 0;
+            if (!data) return;
+            const totalMatch = data.match(/MemTotal: *(\d+)/);
+            const availMatch = data.match(/MemAvailable: *(\d+)/);
+            
+            root.memTotal = totalMatch ? (parseInt(totalMatch[1], 10) || 1) : 1;
+            root.memUsed = availMatch ? (root.memTotal - (parseInt(availMatch[1], 10) || 0)) : 0;
         }
     }
 
     Process {
         id: storage
 
-        command: ["sh", "-c", "df | grep '^/dev/' | awk '{print $1, $3, $4}'"]
+        command: ["sh", "-c", "df -kP | grep '^/dev/' | awk '{print $1, $3, $4, $6}'"]
         stdout: StdioCollector {
             onStreamFinished: {
-                const deviceMap = new Map();
+                const deviceMap = {};
+                const newDisks = [];
 
-                for (const line of text.trim().split("\n")) {
-                    if (line.trim() === "")
+                if (!text || text.trim() === "") {
+                    root.disks = [];
+                    return;
+                }
+
+                const lines = text.trim().split("\n");
+                for (let i = 0; i < lines.length; i++) {
+                    const line = lines[i].trim();
+                    if (line === "")
                         continue;
 
-                    const parts = line.trim().split(/\s+/);
-                    if (parts.length >= 3) {
+                    const parts = line.split(/\s+/);
+                    if (parts.length >= 4) {
                         const device = parts[0];
                         const used = parseInt(parts[1], 10) || 0;
                         const avail = parseInt(parts[2], 10) || 0;
+                        const mount = parts[3];
 
-                        // Only keep the entry with the largest total space for each device
-                        if (!deviceMap.has(device) || (used + avail) > (deviceMap.get(device).used + deviceMap.get(device).avail)) {
-                            deviceMap.set(device, {
+                        const total = used + avail;
+                        if (!deviceMap[device] || total > (deviceMap[device].used + deviceMap[device].avail)) {
+                            deviceMap[device] = {
+                                mount: mount,
                                 used: used,
-                                avail: avail
-                            });
+                                avail: avail,
+                                total: total,
+                                perc: total > 0 ? used / total : 0
+                            };
                         }
                     }
                 }
 
                 let totalUsed = 0;
                 let totalAvail = 0;
-
-                for (const [device, stats] of deviceMap) {
+                const keys = Object.keys(deviceMap);
+                for (let j = 0; j < keys.length; j++) {
+                    const stats = deviceMap[keys[j]];
                     totalUsed += stats.used;
                     totalAvail += stats.avail;
+                    newDisks.push(stats);
                 }
 
                 root.storageUsed = totalUsed;
                 root.storageTotal = totalUsed + totalAvail;
+                root.disks = newDisks;
             }
         }
     }
@@ -144,9 +188,22 @@ Singleton {
         id: gpuTypeCheck
 
         running: !Config.services.gpuType
-        command: ["sh", "-c", "if command -v nvidia-smi &>/dev/null && nvidia-smi -L &>/dev/null; then echo NVIDIA; elif ls /sys/class/drm/card*/device/gpu_busy_percent 2>/dev/null | grep -q .; then echo GENERIC; else echo NONE; fi"]
+        command: ["sh", "-c", "if command -v nvidia-smi &>/dev/null && nvidia-smi -L &>/dev/null; then echo NVIDIA && nvidia-smi --query-gpu=name --format=csv,noheader; elif ls /sys/class/drm/card*/device/gpu_busy_percent 2>/dev/null | grep -q .; then echo GENERIC && grep -h . /sys/class/drm/card*/device/model 2>/dev/null || echo GPU; else echo NONE; fi"]
         stdout: StdioCollector {
-            onStreamFinished: root.autoGpuType = text.trim()
+            onStreamFinished: {
+                if (!text || text.trim() === "")
+                    return;
+
+                const lines = text.trim().split("\n");
+                if (lines.length >= 1) {
+                    root.autoGpuType = lines[0].trim();
+                }
+                if (lines.length >= 2) {
+                    root.gpuName = lines[1].trim();
+                } else if (root.autoGpuType === "GENERIC") {
+                    root.gpuName = "Generic GPU";
+                }
+            }
         }
     }
 
@@ -157,13 +214,24 @@ Singleton {
         stdout: StdioCollector {
             onStreamFinished: {
                 if (root.gpuType === "GENERIC") {
+                    if (!text || text.trim() === "") {
+                        root.gpuPerc = 0;
+                        return;
+                    }
                     const percs = text.trim().split("\n");
                     const sum = percs.reduce((acc, d) => acc + parseInt(d, 10), 0);
                     root.gpuPerc = sum / percs.length / 100;
                 } else if (root.gpuType === "NVIDIA") {
-                    const [usage, temp] = text.trim().split(",");
-                    root.gpuPerc = parseInt(usage, 10) / 100;
-                    root.gpuTemp = parseInt(temp, 10);
+                    if (!text || text.trim() === "") {
+                        root.gpuPerc = 0;
+                        root.gpuTemp = 0;
+                        return;
+                    }
+                    const parts = text.trim().split(",");
+                    if (parts.length >= 2) {
+                        root.gpuPerc = parseInt(parts[0], 10) / 100;
+                        root.gpuTemp = parseInt(parts[1], 10);
+                    }
                 } else {
                     root.gpuPerc = 0;
                     root.gpuTemp = 0;

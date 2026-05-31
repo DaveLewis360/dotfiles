@@ -16,10 +16,10 @@ ShapePath {
     
     // Smoothly transition the alpha based on whether the popout is active
     // This ensures it fades out nicely instead of leaving artifacts
-    readonly property real activeAlpha: wrapper.hasCurrent ? 1.0 : 0.0
+    readonly property real activeAlpha: wrapper.hasCurrent || wrapper.isDetached ? 1.0 : 0.0
     
     strokeWidth: -1
-    fillColor: Qt.rgba(Colours.glassBackground.r, Colours.glassBackground.g, Colours.glassBackground.b, activeAlpha)
+    fillColor: Qt.rgba(Colours.tPalette.m3surface.r, Colours.tPalette.m3surface.g, Colours.tPalette.m3surface.b, Colours.tPalette.m3surface.a * activeAlpha)
 
     // Start at top-left corner (after rounding)
     // We use a small epsilon to avoid math errors at zero width/height

@@ -2,13 +2,13 @@ pragma ComponentBehavior: Bound
 
 import ".."
 import "../../components"
-import qs.components
-import qs.components.controls
-import qs.components.containers
-import qs.services
-import qs.config
 import QtQuick
 import QtQuick.Layouts
+import qs.components
+import qs.components.containers
+import qs.components.controls
+import qs.services
+import qs.config
 
 CollapsibleSection {
     id: root
@@ -48,35 +48,6 @@ CollapsibleSection {
             onValueModified: newValue => {
                 rootPane.transparencyBase = newValue / 100;
                 rootPane.saveConfig();
-            }
-        }
-    }
-
-    SectionContainer {
-        contentSpacing: Appearance.spacing.normal
-
-        ColumnLayout {
-            Layout.fillWidth: true
-            spacing: Appearance.spacing.small
-
-            StyledText {
-                text: qsTr("App Background Color (HEX)")
-                font.weight: 500
-            }
-
-            StyledTextField {
-                Layout.fillWidth: true
-                placeholderText: "#000000"
-                text: rootPane.appBackground
-
-                onEditingFinished: {
-                    if (text.match(/^#[0-9A-Fa-f]{6}$/)) {
-                        rootPane.appBackground = text;
-                        rootPane.saveConfig();
-                    } else {
-                        Toaster.toast(qsTr("Invalid Color"), qsTr("Must be a valid 6-character HEX code (e.g., #000000)"), "error");
-                    }
-                }
             }
         }
     }

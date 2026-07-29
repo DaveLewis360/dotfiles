@@ -1,2 +1,0 @@
--- Compatibility fallback for non-Lua profile
-print('Lua compatibility fallback active')

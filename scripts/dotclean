@@ -1,0 +1,287 @@
+#!/usr/bin/env bash
+# ==============================================================================
+# dotclean — régi dotfiles/quickshell mentések visszavonható kitakarítása
+# ==============================================================================
+# NEM TÖRÖL. A kijelölt elemeket egy "kuka" könyvtárba MOZGATJA
+# (~/.local/share/dotfiles-trash/<időbélyeg>/). Mivel ugyanazon a
+# fájlrendszeren van, a mozgatás azonnali, és bármikor visszavonható.
+# A tényleges törlés külön, explicit lépés (--purge).
+#
+# Használat:
+#   dotclean                      # jelentés: mi mennyit foglal (nem módosít)
+#   dotclean --stage 1            # 1. szint kukába mozgatása (bizonyítottan redundáns)
+#   dotclean --stage 2            # 2. szint kukába mozgatása (átnézendő)
+#   dotclean --list               # kuka-tételek listája
+#   dotclean --restore <ts>       # egy tétel teljes visszaállítása
+#   dotclean --purge <ts>         # VÉGLEGES törlés (megerősítéssel)
+# ==============================================================================
+
+set -euo pipefail
+
+TRASH="$HOME/.local/share/dotfiles-trash"
+MODE="report"
+ARG=""
+
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --stage)   MODE="stage"; ARG="$2"; shift 2 ;;
+        --list)    MODE="list"; shift ;;
+        --restore) MODE="restore"; ARG="$2"; shift 2 ;;
+        --purge)   MODE="purge"; ARG="$2"; shift 2 ;;
+        -h|--help) sed -n '3,18p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+        *) echo "Ismeretlen opció: $1" >&2; exit 1 ;;
+    esac
+done
+
+C_OK=$'\033[32m'; C_WARN=$'\033[33m'; C_ERR=$'\033[31m'; C_DIM=$'\033[2m'; C_B=$'\033[1m'; C_0=$'\033[0m'
+die() { echo "${C_ERR}Hiba:${C_0} $*" >&2; exit 1; }
+hr()  { echo "═══════════════════════════════════════════════════════════════════════"; }
+
+# ==============================================================================
+# 1. SZINT — bizonyítottan redundáns (a redundancia ellenőrizve lett)
+#     formátum:  útvonal|indoklás
+# ==============================================================================
+TIER1=(
+"$HOME/.config.bak|Teljes .config klón 2026-06-16-ról. Ellenőrizve: EGYETLEN könyvtár van benne, ami nincs az élő .config-ban (kitty/), és az ÜRES. 22,7 GB-ja csak app-adat (heroic, Code, discord, böngészők, r2modman)."
+"$HOME/HyDE|A ~/dotfiles/profiles/hyde EGZAKT duplikátuma: ugyanaz a commit (a51460a7), 0 módosított fájl, 0 saját commit az origin/master felett."
+"$HOME/Archivum/Dotfiles|Az elifouts/Dotfiles IDEGEN repó klónja. 0 módosított fájl, 0 saját commit → bármikor újraklónozható. Ebből 395 MB a .git."
+"$HOME/caelestia-backups/dotfiles-20260601_005241.bundle|266 MB git bundle. A benne lévő HEAD (1fcef558) megvan a ~/dotfiles.bak repóban ÉS fel van töltve a GitHubra (DaveLewis360/dotfiles)."
+"$HOME/caelestia-backups/my-caelestia-shell-20260531_214933.bundle|Git bundle. MINDHÁROM branch-csúcsa (fe89b740, 5a4ca4f8, 7aeb8f9a) elérhető az élő ~/Reference/my-caelestia-shell repóban."
+"$HOME/caelestia-backups/my-caelestia-shell-src-20260531_214933.tar.gz|Ugyanannak a forknak a forráskód-tarballja, aminek a git története megvan."
+"$HOME/.config/hyde.bak-dotswitch-1782870315|310 MB, amiből szinte minden a HyDE letöltött themes/ könyvtára (generált/letöltött tartalom). A tényleges hyde config a profiles/hyde-ban 164 KB."
+"$HOME/ii-original-dots-backup|761 MB, amiből ~761 MB a .local/share/icons (ikontémák, csomagból újratelepíthető). A config-rész összesen ~24 KB."
+"$HOME/.config/ghostty.bak-dotswitch-1785232379|A dotswitch automatikus mentése (2026-07-28). A ghostty config verziókövetve van a ~/dotfiles-ban."
+"$HOME/.config/ghostty.bak-dotswitch-1785318278|A dotswitch automatikus mentése (2026-07-29). Ugyanaz."
+"$HOME/.config/ghostty.current.bak|Régi ghostty mentés (2026-06-16)."
+"$HOME/.config/kitty.bak-dotswitch-1784895366|A dotswitch automatikus mentése (2026-07-04)."
+"$HOME/.config/kitty.bak-dotswitch-1782870315|A dotswitch automatikus mentése (2026-07-01)."
+"$HOME/.config/kitty.bak_1781698647|Régi kitty mentés."
+"$HOME/test_configs|Eldobható tesztkönyvtár a dotswitch fejlesztéséből (2026-07-01)."
+"$HOME/test_ln_dir|Eldobható tesztkönyvtár a symlink-logika próbájából (2026-07-01)."
+"$HOME/test_switch.sh|Eldobható tesztscript a dotswitch fejlesztéséből."
+"$HOME/test_hypr.sh|Eldobható tesztscript."
+"$HOME/test_hypr2.sh|Eldobható tesztscript."
+"$HOME/test_hyde_lua.sh|Eldobható tesztscript."
+"$HOME/test_lua_source.sh|Eldobható tesztscript."
+"$HOME/test_reload_lua.sh|Eldobható tesztscript."
+)
+
+# ==============================================================================
+# 2. SZINT — nagy valószínűséggel felesleges, de nem bizonyítottan redundáns.
+#            Nézd át, mielőtt kukába teszed.
+# ==============================================================================
+TIER2=(
+"$HOME/dotfiles.bak|A RÉGI dotfiles repó (582 MB, ebből 266 MB .git és 249 MB .config/ml4w). A teljes története fel van töltve a GitHubra (DaveLewis360/dotfiles, 0adca458 — ellenőrizve, azonos). A 4 nem committolt fájl elmentve ide: ~/dotfiles-restore-point-20260729_124849/dotfiles.bak.uncommitted.patch"
+"$HOME/Archivum/.dotfiles|A holman/dotfiles IDEGEN repó klónja. Eddig ÉLŐ függőség volt (innen jött a git identitás), de az átkerült a ~/dotfiles/shared/gitconfig.local-ba, így már nem kell. A ~/.dotfiles symlinket is törölni kell vele együtt."
+"$HOME/dotfiles-migration-backup|82 MB, 2026-06-17-i migrációs mentés (20260616_231637 + my-caelestia-hypr-corrupted). A my-caelestia profil azóta verziókövetve van."
+"$HOME/.config/caelestia.current.bak|28 MB caelestia config mentés 2026-06-16-ról."
+"$HOME/Archivum/CAELESTIA_PURGE_BACKUP|4,4 MB, 2026-02-05-i caelestia mentés."
+"$HOME/Archivum/caelestia_backup_fixes|100 KB, 2026-02-05-i részleges javítás-mentés."
+"$HOME/Archivum/My-Caelestia-Setup|104 KB, 2026-02-06-i korai setup-vázlat."
+"$HOME/dotfiles-backup-patches|588 KB patch-mentés 2026-06-21-ről (end4/hyde/stable diffek). Az upstream repók azóta érintetlenek."
+"$HOME/dotfiles-reset-backup-20260701_023254|56 KB diff/HEAD mentés 2026-07-01-ről."
+"$HOME/Reference/archived|8 KB: switch_shell.sh.bak — a dotswitch elődje."
+"$HOME/.config/noctalia|44 KB. A noctalia rice NINCS a dotswitch profilok között, tehát árva konfiguráció."
+"$HOME/dotfiles_elemzes_2026-06-16.md|Korábbi elemzés (2026-06-16), amit ez a setup felülír."
+"$HOME/dotfiles_switching_terv.md|Korábbi váltási terv (2026-06-16), amit a dotswitch már megvalósít."
+"$HOME/hyprland_config_analysis.md|Korábbi hyprland elemzés (2026-06-16)."
+)
+
+# ==============================================================================
+# SOHA NE — élő függőségek
+# ==============================================================================
+KEEP=(
+"$HOME/dotfiles|Az élő, verziókövetett dotfiles rendszer."
+"$HOME/Reference/my-caelestia-shell|A saját fork — élő fejlesztés."
+"$HOME/Reference/caelestia-shell|A stable profil quickshell forrása."
+"$HOME/Reference/caelestia-shell-git|A git (rolling) profil quickshell forrása."
+"$HOME/.config/illogical-impulse|ÉLŐ config az end4 profilhoz (config.json-t az ii shell olvassa)."
+"$HOME/.config/caelestia|Élő caelestia config (assets, monitors, data)."
+"$HOME/dotfiles-restore-point-20260729_124849|A 2026-07-29-i visszaállítási pont."
+)
+
+# ~ rövidítés (bash-ban a ${v/#$HOME/~} nem működik megbízhatóan)
+short() { case "$1" in "$HOME"/*) printf '~%s' "${1#"$HOME"}";; *) printf '%s' "$1";; esac; }
+human() { du -sh "$1" 2>/dev/null | cut -f1 || echo "?"; }
+kb()    { du -sk "$1" 2>/dev/null | cut -f1 || echo 0; }
+
+# ------------------------------------------------------------------ report
+if [[ "$MODE" == "report" ]]; then
+    hr; echo "${C_B}  DOTCLEAN — takarítási jelentés${C_0}"; hr
+    echo "  ${C_DIM}Ez a futtatás semmit nem módosít.${C_0}"
+    echo
+
+    for tier in 1 2; do
+        if [[ "$tier" == 1 ]]; then
+            arr=("${TIER1[@]}"); echo "${C_B}  1. SZINT — bizonyítottan redundáns${C_0}"
+        else
+            arr=("${TIER2[@]}"); echo "${C_B}  2. SZINT — valószínűleg felesleges, nézd át${C_0}"
+        fi
+        total=0; found=0
+        for entry in "${arr[@]}"; do
+            p="${entry%%|*}"; why="${entry#*|}"
+            if [[ -e "$p" ]]; then
+                s=$(kb "$p"); total=$((total + s)); found=$((found + 1))
+                printf "    %-52s %8s\n" "$(short "$p")" "$(human "$p")"
+                echo "      ${C_DIM}${why}${C_0}" | fold -s -w 100 | sed '2,$s/^/      /'
+            fi
+        done
+        [[ "$found" -eq 0 ]] && echo "    ${C_DIM}(nincs ilyen elem — már ki van takarítva)${C_0}"
+        echo "    ${C_B}összesen: $found elem, $(numfmt --to=iec --from-unit=1024 $total 2>/dev/null || echo "${total}K")${C_0}"
+        echo
+    done
+
+    echo "${C_B}  SOHA NE TÖRÖLD — élő függőségek${C_0}"
+    for entry in "${KEEP[@]}"; do
+        p="${entry%%|*}"; why="${entry#*|}"
+        [[ -e "$p" ]] && printf "    ${C_OK}✓${C_0} %-50s ${C_DIM}%s${C_0}\n" "$(short "$p")" "$why"
+    done
+    echo
+    hr
+    echo "  Szabad hely most: $(df -h "$HOME" | awk 'NR==2{print $4}')"
+    echo
+    echo "  ${C_B}Következő lépés${C_0} (nem töröl, csak kukába mozgat — visszavonható):"
+    echo "    dotclean --stage 1"
+    hr
+    exit 0
+fi
+
+# ------------------------------------------------------------------ list
+if [[ "$MODE" == "list" ]]; then
+    hr; echo "${C_B}  Kuka-tételek${C_0}"; hr
+    if [[ ! -d "$TRASH" ]] || [[ -z "$(ls -A "$TRASH" 2>/dev/null)" ]]; then
+        echo "  ${C_DIM}(üres)${C_0}"
+    else
+        for d in "$TRASH"/*/; do
+            [[ -d "$d" ]] || continue
+            ts=$(basename "$d")
+            echo
+            echo "  ${C_B}$ts${C_0}  —  $(human "$d")"
+            [[ -f "$d/MANIFEST" ]] && sed 's/^/      /' "$d/MANIFEST"
+        done
+        echo
+        hr
+        echo "  Visszaállítás:   dotclean --restore <időbélyeg>"
+        echo "  Végleges törlés: dotclean --purge <időbélyeg>"
+    fi
+    hr
+    exit 0
+fi
+
+# ------------------------------------------------------------------ restore
+if [[ "$MODE" == "restore" ]]; then
+    D="$TRASH/$ARG"
+    [[ -d "$D" ]] || die "Nincs ilyen kuka-tétel: $ARG  (lásd: dotclean --list)"
+    [[ -f "$D/PATHS" ]] || die "Hiányzik a PATHS fájl: $D/PATHS"
+
+    hr; echo "${C_B}  VISSZAÁLLÍTÁS — $ARG${C_0}"; hr
+    n=0; skipped=0
+    while IFS='|' read -r stored orig; do
+        [[ -z "$stored" ]] && continue
+        src="$D/$stored"
+        [[ -e "$src" ]] || continue
+        if [[ -e "$orig" ]]; then
+            echo "  ${C_WARN}⚠${C_0} már létezik, kihagyva: $(short "$orig")"
+            skipped=$((skipped + 1)); continue
+        fi
+        mkdir -p "$(dirname "$orig")"
+        mv "$src" "$orig"
+        echo "  ${C_OK}✓${C_0} $(short "$orig")"
+        n=$((n + 1))
+    done < "$D/PATHS"
+    echo
+    echo "  $n elem visszaállítva, $skipped kihagyva."
+    rmdir "$D" 2>/dev/null && echo "  ${C_DIM}(a kuka-tétel kiürült és törlődött)${C_0}" || true
+    hr
+    exit 0
+fi
+
+# ------------------------------------------------------------------ purge
+if [[ "$MODE" == "purge" ]]; then
+    D="$TRASH/$ARG"
+    [[ -d "$D" ]] || die "Nincs ilyen kuka-tétel: $ARG"
+    hr; echo "${C_B}${C_ERR}  VÉGLEGES TÖRLÉS — $ARG${C_0}"; hr
+    echo "  Méret: $(human "$D")"
+    [[ -f "$D/MANIFEST" ]] && sed 's/^/    /' "$D/MANIFEST"
+    echo
+    echo "  ${C_ERR}Ez VISSZAFORDÍTHATATLAN. Utána már nincs mód visszaállításra.${C_0}"
+    echo
+    read -rp "  Írd be a törléshez: TORLES  > " ans
+    [[ "$ans" == "TORLES" ]] || { echo "  Megszakítva, semmi nem törlődött."; exit 0; }
+    rm -rf "$D"
+    echo "  ${C_OK}✓${C_0} Törölve. Szabad hely: $(df -h "$HOME" | awk 'NR==2{print $4}')"
+    hr
+    exit 0
+fi
+
+# ------------------------------------------------------------------ stage
+if [[ "$MODE" == "stage" ]]; then
+    case "$ARG" in
+        1) arr=("${TIER1[@]}"); label="1. szint (bizonyítottan redundáns)" ;;
+        2) arr=("${TIER2[@]}"); label="2. szint (átnézendő)" ;;
+        *) die "Érvénytelen szint: '$ARG'. Használható: 1 vagy 2" ;;
+    esac
+
+    TS=$(date +%Y%m%d_%H%M%S)
+    D="$TRASH/$TS"
+    mkdir -p "$D"
+
+    hr; echo "${C_B}  KUKÁBA MOZGATÁS — $label${C_0}"; hr
+    echo "  Kuka: $(short "$D")"
+    echo "  ${C_DIM}A mozgatás azonnali (ugyanaz a fájlrendszer) és visszavonható.${C_0}"
+    echo
+
+    {
+      echo "dotclean — $label"
+      echo "időbélyeg: $TS"
+      echo
+    } > "$D/MANIFEST"
+    : > "$D/PATHS"
+
+    n=0; total=0
+    for entry in "${arr[@]}"; do
+        p="${entry%%|*}"; why="${entry#*|}"
+        [[ -e "$p" ]] || continue
+
+        # Élő függőség elleni védelem
+        for k in "${KEEP[@]}"; do
+            [[ "$p" == "${k%%|*}" ]] && die "BELSŐ HIBA: $p a védett listán van, megszakítva."
+        done
+
+        s=$(kb "$p"); total=$((total + s))
+        stored=$(echo "${p#$HOME/}" | tr '/' '_')
+        mv "$p" "$D/$stored"
+        echo "$stored|$p" >> "$D/PATHS"
+        { echo "- $(short "$p")  ($(human "$D/$stored"))"; echo "    $why"; } >> "$D/MANIFEST"
+        printf "  ${C_OK}✓${C_0} %-52s %8s\n" "$(short "$p")" "$(human "$D/$stored")"
+        n=$((n + 1))
+    done
+
+    # A ~/.dotfiles symlink árván marad, ha az Archivum/.dotfiles elmozdult
+    if [[ -L "$HOME/.dotfiles" ]] && [[ ! -e "$HOME/.dotfiles" ]]; then
+        mv "$HOME/.dotfiles" "$D/dotfiles_symlink"
+        echo "dotfiles_symlink|$HOME/.dotfiles" >> "$D/PATHS"
+        echo "- ~/.dotfiles (törött symlink lett)" >> "$D/MANIFEST"
+        echo "  ${C_OK}✓${C_0} ~/.dotfiles ${C_DIM}(törött symlink)${C_0}"
+        n=$((n + 1))
+    fi
+
+    echo
+    if [[ "$n" -eq 0 ]]; then
+        rmdir "$D" 2>/dev/null || true
+        echo "  ${C_DIM}Nem volt mit mozgatni — ez a szint már ki van takarítva.${C_0}"
+        hr; exit 0
+    fi
+
+    echo "  ${C_B}$n elem, $(numfmt --to=iec --from-unit=1024 $total 2>/dev/null || echo "${total}K") a kukában.${C_0}"
+    echo "  ${C_DIM}A hely még NEM szabadult fel — ahhoz --purge kell.${C_0}"
+    echo
+    hr
+    echo "  ${C_B}Most:${C_0}"
+    echo "    1. Használd a gépet, ellenőrizd, hogy minden működik"
+    echo "       (dotswitch mine / stable / end4 / hyde, git identitás, terminálok)"
+    echo "    2. Ha valami hiányzik:  dotclean --restore $TS"
+    echo "    3. Ha pár nap után minden rendben:  dotclean --purge $TS"
+    hr
+    exit 0
+fi

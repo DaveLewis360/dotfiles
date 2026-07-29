@@ -1,0 +1,304 @@
+#!/usr/bin/env bash
+# ==============================================================================
+# shell-sync-upstream — upstream frissítés beolvasztása a saját forkba,
+#                       úgy, hogy MINDEN lépés visszavonható legyen.
+# ==============================================================================
+# Minden merge előtt automatikusan készít egy  pre-merge/<időbélyeg>  taget,
+# így a művelet egyetlen paranccsal visszavonható (--undo).
+#
+# Használat:
+#   shell-sync-upstream                 # merge upstream/main
+#   shell-sync-upstream --tag v2.2.0    # merge egy konkrét upstream tagre
+#   shell-sync-upstream --dry-run       # csak megmutatja, mi jönne
+#   shell-sync-upstream --abort         # FÉLBEHAGYOTT merge eldobása
+#   shell-sync-upstream --undo          # BEFEJEZETT merge visszavonása
+#   shell-sync-upstream --list          # visszaállítási pontok listája
+#   shell-sync-upstream --repo <path>   # más repóra (alap: my-caelestia-shell)
+# ==============================================================================
+
+set -euo pipefail
+
+REPO="${HOME}/Reference/my-caelestia-shell"
+MODE="merge"
+TARGET=""
+
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --repo)    REPO="$2"; shift 2 ;;
+        --tag)     TARGET="$2"; shift 2 ;;
+        --dry-run) MODE="dryrun"; shift ;;
+        --abort)   MODE="abort"; shift ;;
+        --undo)    MODE="undo"; shift ;;
+        --list)    MODE="list"; shift ;;
+        -h|--help) MODE="help"; shift ;;
+        *) echo "Ismeretlen opció: $1" >&2; exit 1 ;;
+    esac
+done
+
+C_OK=$'\033[32m'; C_WARN=$'\033[33m'; C_ERR=$'\033[31m'; C_DIM=$'\033[2m'; C_B=$'\033[1m'; C_0=$'\033[0m'
+
+info() { echo "${C_B}$*${C_0}"; }
+ok()   { echo "  ${C_OK}✓${C_0} $*"; }
+warn() { echo "  ${C_WARN}⚠${C_0} $*"; }
+die()  { echo "${C_ERR}Hiba:${C_0} $*" >&2; exit 1; }
+hr()   { echo "════════════════════════════════════════════════════════════"; }
+
+[[ -d "$REPO/.git" ]] || die "Nem git repo: $REPO"
+cd "$REPO"
+
+git remote get-url upstream >/dev/null 2>&1 \
+    || die "Nincs 'upstream' remote a repóban. Add hozzá:
+  git -C $REPO remote add upstream https://github.com/caelestia-dots/shell.git"
+
+# ------------------------------------------------------------------ help
+if [[ "$MODE" == "help" ]]; then
+    sed -n '3,22p' "$0" | sed 's/^# \{0,1\}//'
+    exit 0
+fi
+
+# ------------------------------------------------------------------ list
+if [[ "$MODE" == "list" ]]; then
+    hr; info "  Visszaállítási pontok — $(basename "$REPO")"; hr
+    echo
+    echo "  ${C_B}pre-merge tagek${C_0} ${C_DIM}(merge előtti állapotok)${C_0}"
+    git for-each-ref --sort=-creatordate refs/tags/pre-merge \
+        --format="    %(refname:short)  →  %(objectname:short)  %(creatordate:short)" \
+        | head -20 || true
+    [[ -z "$(git tag -l 'pre-merge/*')" ]] && echo "    ${C_DIM}(még nincs)${C_0}"
+    echo
+    echo "  ${C_B}restore-point tagek${C_0} ${C_DIM}(kézi mentések)${C_0}"
+    git for-each-ref --sort=-creatordate refs/tags/restore-point \
+        --format="    %(refname:short)  →  %(objectname:short)  %(creatordate:short)" \
+        | head -20 || true
+    [[ -z "$(git tag -l 'restore-point/*')" ]] && echo "    ${C_DIM}(még nincs)${C_0}"
+    echo
+    echo "  ${C_B}archive tagek${C_0} ${C_DIM}(archivált branchek)${C_0}"
+    git for-each-ref --sort=-creatordate refs/tags/archive \
+        --format="    %(refname:short)  →  %(objectname:short)  %(creatordate:short)" \
+        | head -20 || true
+    [[ -z "$(git tag -l 'archive/*')" ]] && echo "    ${C_DIM}(még nincs)${C_0}"
+    echo; hr
+    echo "  Visszaállítás egy pontra:"
+    echo "    git -C $REPO reset --hard <tag>"
+    hr
+    exit 0
+fi
+
+# ------------------------------------------------------------------ abort
+if [[ "$MODE" == "abort" ]]; then
+    if [[ -d .git/MERGE_HEAD ]] || [[ -f .git/MERGE_HEAD ]]; then
+        git merge --abort
+        ok "Félbehagyott merge eldobva, a working tree visszaállt."
+    else
+        warn "Nincs folyamatban merge — nincs mit eldobni."
+        echo "  Befejezett merge visszavonásához: $0 --undo"
+    fi
+    exit 0
+fi
+
+# ------------------------------------------------------------------ undo
+if [[ "$MODE" == "undo" ]]; then
+    LAST_TAG=$(git for-each-ref --sort=-creatordate refs/tags/pre-merge --format='%(refname:short)' | head -1)
+    [[ -n "$LAST_TAG" ]] || die "Nincs pre-merge tag, amire visszaállhatnánk. Lásd: $0 --list"
+
+    hr; info "  MERGE VISSZAVONÁSA"; hr
+    echo "  Repo:          $REPO"
+    echo "  Jelenlegi HEAD: $(git log -1 --format='%h %s')"
+    echo "  Visszaállítás:  $LAST_TAG → $(git log -1 --format='%h %s' "$LAST_TAG")"
+    echo
+    LOST=$(git rev-list --count "$LAST_TAG"..HEAD)
+    echo "  ${C_WARN}Ez a művelet eldobja a HEAD utáni $LOST commitot és a nem"
+    echo "  committolt változtatásokat is (git reset --hard).${C_0}"
+    echo
+
+    if [[ -n "$(git status --porcelain)" ]]; then
+        warn "A working tree nem tiszta. A nem committolt munka elveszik."
+    fi
+
+    read -rp "  Biztosan? Írd be: IGEN  > " answer
+    [[ "$answer" == "IGEN" ]] || { echo "  Megszakítva, semmi nem változott."; exit 0; }
+
+    # Biztonsági háló: a visszavonás előtti állapotot is elmentjük
+    SAFETY="undo-safety/$(date +%Y%m%d_%H%M%S)"
+    git tag -a "$SAFETY" -m "Állapot a --undo előtt" HEAD
+    ok "Biztonsági tag a visszavonás ELŐTTI állapotra: $SAFETY"
+
+    git reset --hard "$LAST_TAG"
+    ok "Visszaállítva: $LAST_TAG"
+    echo
+    echo "  ${C_DIM}Ha mégis kellene a visszavont állapot:  git reset --hard $SAFETY${C_0}"
+    exit 0
+fi
+
+# ------------------------------------------------------------------ merge / dry-run
+hr
+info "  UPSTREAM SZINKRONIZÁLÁS — $(basename "$REPO")"
+hr
+
+BRANCH=$(git rev-parse --abbrev-ref HEAD)
+[[ "$BRANCH" != "HEAD" ]] || die "Detached HEAD állapotban vagy. Válts branchre: git switch main"
+
+echo "  Branch:   $BRANCH"
+echo "  Upstream: $(git remote get-url upstream)"
+echo
+
+info "  Upstream letöltése…"
+git fetch upstream --tags --quiet
+ok "fetch kész"
+
+REF="${TARGET:-upstream/main}"
+git rev-parse --verify "$REF" >/dev/null 2>&1 || die "Nem létező referencia: $REF"
+
+BASE=$(git merge-base HEAD "$REF")
+AHEAD=$(git rev-list --count "$REF"..HEAD)
+BEHIND=$(git rev-list --count HEAD.."$REF")
+
+echo
+echo "  Cél:            $REF ($(git log -1 --format='%h %ad' --date=short "$REF"))"
+echo "  Közös ős:       $(git rev-parse --short "$BASE") ($(git log -1 --format='%ad' --date=short "$BASE"))"
+echo "  Saját commitok: $AHEAD"
+echo "  Beolvasztandó:  $BEHIND upstream commit"
+
+if [[ "$BEHIND" -eq 0 ]]; then
+    echo
+    ok "Már up to date — nincs mit beolvasztani."
+    exit 0
+fi
+
+echo
+info "  Beérkező upstream commitok:"
+git log --oneline --no-decorate "HEAD..$REF" | head -40 | sed 's/^/    /'
+[[ "$BEHIND" -gt 40 ]] && echo "    ${C_DIM}… és további $((BEHIND - 40)) commit${C_0}"
+
+# Előrejelzés: mely SAJÁT fájlok ütközhetnek
+echo
+info "  Konfliktus-előrejelzés:"
+MY_FILES=$(git diff --name-only "$BASE" HEAD)
+UP_FILES=$(git diff --name-only "$BASE" "$REF")
+RISK=$(comm -12 <(echo "$MY_FILES" | sort) <(echo "$UP_FILES" | sort))
+if [[ -z "$RISK" ]]; then
+    ok "Nincs átfedés a saját és az upstream által módosított fájlok között."
+else
+    RISK_N=$(echo "$RISK" | wc -l)
+    warn "$RISK_N fájlt mindkét oldal módosított:"
+    echo "$RISK" | sed 's/^/      /'
+fi
+
+if [[ "$MODE" == "dryrun" ]]; then
+    echo
+    hr
+    echo "  ${C_DIM}--dry-run: semmi nem változott. Éles futtatás: $0${C_0}"
+    hr
+    exit 0
+fi
+
+# --- Tiszta working tree kikényszerítése ---
+if [[ -n "$(git status --porcelain)" ]]; then
+    echo
+    warn "A working tree nem tiszta:"
+    git status --short | sed 's/^/      /'
+    echo
+    echo "  Merge előtt commitold vagy stashold. Például:"
+    echo "    git -C $REPO stash push -m 'merge előtt'"
+    die "megszakítva — a nem committolt munka védelme érdekében"
+fi
+
+# --- VISSZAÁLLÍTÁSI PONT ---
+TS=$(date +%Y%m%d_%H%M%S)
+PRE_TAG="pre-merge/$TS"
+echo
+git tag -a "$PRE_TAG" -m "Állapot a(z) $REF beolvasztása előtt
+
+HEAD:     $(git rev-parse HEAD)
+Cél:      $REF ($(git rev-parse "$REF"))
+Közös ős: $BASE"
+ok "Visszaállítási pont: ${C_B}$PRE_TAG${C_0}"
+echo "    ${C_DIM}visszavonás bármikor:  $0 --undo${C_0}"
+
+# --- MERGE ---
+echo
+info "  Merge…"
+if git merge --no-edit --no-ff "$REF" 2>&1 | sed 's/^/    /'; then
+    echo
+    ok "Merge sikeres, konfliktus nélkül."
+    echo
+    echo "  Új HEAD: $(git log -1 --format='%h %s')"
+    RR=$(ls -1 .git/rr-cache 2>/dev/null | wc -l)
+    [[ "$RR" -gt 0 ]] && echo "  ${C_DIM}rerere gyorsítótár: $RR rögzített feloldás${C_0}"
+    echo
+    hr
+    echo "  ${C_B}Következő lépések:${C_0}"
+    echo "    1. Build:  cd $REPO && ~/dotfiles/scripts/shell-rebuild"
+    echo "    2. Teszt:  dotswitch mine"
+    echo "    3. Ha jó:  git push origin $BRANCH"
+    echo "    4. Ha nem: $0 --undo"
+    hr
+    exit 0
+fi
+
+# --- KONFLIKTUS ---
+echo
+CONFLICTS=$(git diff --name-only --diff-filter=U)
+N=$(echo "$CONFLICTS" | grep -c . || true)
+warn "${C_B}$N fájlban konfliktus${C_0}"
+echo
+
+# rerere által már automatikusan feloldottak
+RESOLVED=$(git diff --cached --name-only 2>/dev/null | grep -c . || true)
+if [[ "$RESOLVED" -gt 0 ]]; then
+    ok "A rerere $RESOLVED fájlt már automatikusan feloldott (korábbi merge alapján)."
+    echo "    ${C_DIM}Ezeket is ellenőrizd:  git diff --cached${C_0}"
+    echo
+fi
+
+echo "  ${C_B}Konfliktusos fájlok, kockázati csoport szerint${C_0}"
+echo "  ${C_DIM}(a csoportok leírása: $REPO/CUSTOMIZATIONS.md)${C_0}"
+echo
+while IFS= read -r f; do
+    [[ -z "$f" ]] && continue
+    case "$f" in
+        modules/bar/*|modules/drawers/*|modules/osd/*)
+            echo "    ${C_WARN}[1. horizontális bar]${C_0} $f" ;;
+        modules/background/Wallpaper.qml|services/Wallpapers.qml|modules/nexus/*)
+            echo "    ${C_WARN}[3. videó wallpaper]${C_0}  $f" ;;
+        services/Players.qml|utils/Images.qml|components/widgets/CoverArt.qml|modules/lock/Media.qml)
+            echo "    ${C_OK}[2. saját funkció]${C_0}    $f" ;;
+        *)
+            echo "    ${C_DIM}[4. finomítás]${C_0}       $f" ;;
+    esac
+done <<< "$CONFLICTS"
+
+cat <<EOF
+
+$(hr)
+  ${C_B}Mit tegyél${C_0}
+
+  Az 1. csoportnál (horizontális bar) a helyes eredmény szinte mindig:
+  ${C_B}az upstream érdemi változtatása + a saját tengely-geometria megtartva${C_0}
+  (Column→Row, y→x, implicitWidth↔implicitHeight).
+
+  A zdiff3 konfliktus-markerek a közös őst is megmutatják, így látod,
+  mit változtatott valójában az upstream.
+
+  Feloldás:
+    \$EDITOR <fájl>                  # majd:
+    git -C $REPO add <fájl>
+    git -C $REPO commit              # ha mindent feloldottál
+
+  Hasznos:
+    git -C $REPO diff --diff-filter=U          # csak a konfliktusok
+    git -C $REPO checkout --ours   <fájl>      # a saját verzió megtartása
+    git -C $REPO checkout --theirs <fájl>      # az upstream verzió átvétele
+    git -C $REPO mergetool                     # vizuális feloldás
+
+  Kilépés:
+    $0 --abort     # merge eldobása, vissza a merge előtti állapotra
+    $0 --undo      # ha már commitoltad a merge-öt
+
+  A feloldásaidat a rerere megjegyzi — a következő upstream merge-nél
+  automatikusan alkalmazza őket.
+
+  Visszaállítási pont: ${C_B}$PRE_TAG${C_0}
+$(hr)
+EOF
+exit 1

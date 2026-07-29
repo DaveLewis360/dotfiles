@@ -1,0 +1,68 @@
+#!/usr/bin/env bash
+# ==============================================================================
+# shell-rebuild — a caelestia shell C++/QML pluginjeinek újraépítése
+# ==============================================================================
+# A dotswitch a QML_IMPORT_PATH-on keresztül a <repo>/build/qml könyvtárat
+# használja, ezért upstream merge vagy C++ módosítás után újra kell buildelni.
+#
+# Használat:
+#   shell-rebuild                    # my-caelestia-shell (alap)
+#   shell-rebuild --repo <path>      # más repo
+#   shell-rebuild --clean            # build/ eldobása és teljes újraépítés
+# ==============================================================================
+
+set -euo pipefail
+
+REPO="${HOME}/Reference/my-caelestia-shell"
+CLEAN=0
+
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --repo)  REPO="$2"; shift 2 ;;
+        --clean) CLEAN=1; shift ;;
+        -h|--help) sed -n '3,14p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+        *) echo "Ismeretlen opció: $1" >&2; exit 1 ;;
+    esac
+done
+
+C_OK=$'\033[32m'; C_ERR=$'\033[31m'; C_B=$'\033[1m'; C_0=$'\033[0m'
+die() { echo "${C_ERR}Hiba:${C_0} $*" >&2; exit 1; }
+
+[[ -f "$REPO/CMakeLists.txt" ]] || die "Nincs CMakeLists.txt itt: $REPO"
+cd "$REPO"
+
+command -v cmake >/dev/null || die "cmake nincs telepítve"
+command -v ninja >/dev/null || die "ninja nincs telepítve"
+
+echo "════════════════════════════════════════════════════════════"
+echo "${C_B}  SHELL BUILD — $(basename "$REPO")${C_0}"
+echo "════════════════════════════════════════════════════════════"
+echo "  commit:  $(git rev-parse --short HEAD) $(git log -1 --format='%s' | cut -c1-50)"
+echo "  verzió:  $(git describe --tags 2>/dev/null || echo '?')"
+echo
+
+if [[ "$CLEAN" -eq 1 ]]; then
+    echo "  build/ eldobása…"
+    rm -rf build
+fi
+
+if [[ ! -f build/build.ninja ]]; then
+    echo "  CMake konfigurálás (Ninja)…"
+    cmake -B build -G Ninja \
+        -DCMAKE_BUILD_TYPE=Release \
+        -DINSTALL_QMLDIR=usr/lib/qt6/qml \
+        || die "a cmake konfigurálás elhasalt"
+fi
+
+echo "  Build…"
+if ! ninja -C build; then
+    echo
+    die "a build elhasalt — a régi build/qml érintetlen maradt"
+fi
+
+echo
+echo "  ${C_OK}✓${C_0} Build kész: $REPO/build/qml"
+ls build/qml/Caelestia 2>/dev/null | sed 's/^/      /'
+echo
+echo "  Aktiválás:  dotswitch $( [[ "$REPO" == *my-caelestia-shell ]] && echo mine || echo '<profil>' )"
+echo "════════════════════════════════════════════════════════════"

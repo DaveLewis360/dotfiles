@@ -29,3 +29,8 @@ dotswitch.bak-*
 
 # --- Futásidejű / gépspecifikus ---
 *.log
+
+# --- Futásidejű színséma (a caelestia generálja az aktuális wallpaperből) ---
+# A default.conf / default.lua KÖVETVE van, csak az aktuális állapot nem.
+profiles/*/hypr/scheme/current.conf
+profiles/*/hypr/scheme/current.lua

@@ -133,9 +133,13 @@ Nincs btrfs/snapper ezen a gépen (ext4), ezért **a git a visszaállítás eszk
 | Bármely dotfiles-változtatás | `git -C ~/dotfiles log` → `git revert <commit>` |
 | Kiinduló állapot (2026-07-29) | `git -C ~/dotfiles checkout baseline-20260729` |
 | Fork merge visszavonása | `shell-sync-upstream --undo` |
-| Fork korábbi állapota | `shell-sync-upstream --list` → `git reset --hard <tag>` |
-| Archivált fork-branchek | `git tag -l 'archive/*'` → `git branch <név> archive/<név>` |
+| Fork korábbi állapota | `shell-sync-upstream --list` → `git reset --hard refs/backup/<név>` |
+| Archivált fork-branchek | `shell-sync-upstream --list` → `git branch <név> refs/backup/archive/<név>` |
 | Kitakarított mentések | `dotclean --list` → `dotclean --restore <ts>` |
+
+A shell-repók visszaállítási pontjai a `refs/backup/` névtérben vannak, **nem
+tagként** — mert a `CMakeLists.txt` a verziót a `git describe --tags`-ból veszi,
+és egy saját tag eltörné a buildet.
 
 Teljes visszaállítási pont a nagy átalakítás előttről:
 `~/dotfiles-restore-point-20260729_124849/` (symlink-állapot, HEAD-ek, patchek,

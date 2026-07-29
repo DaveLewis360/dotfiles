@@ -38,7 +38,7 @@ echo "════════════════════════�
 echo "${C_B}  SHELL BUILD — $(basename "$REPO")${C_0}"
 echo "════════════════════════════════════════════════════════════"
 echo "  commit:  $(git rev-parse --short HEAD) $(git log -1 --format='%s' | cut -c1-50)"
-echo "  verzió:  $(git describe --tags 2>/dev/null || echo '?')"
+echo "  verzió:  $(git tag -l 'v[0-9]*' --sort=-v:refname --merged HEAD | head -1 || echo '?')"
 echo
 
 if [[ "$CLEAN" -eq 1 ]]; then
@@ -47,10 +47,19 @@ if [[ "$CLEAN" -eq 1 ]]; then
 fi
 
 if [[ ! -f build/build.ninja ]]; then
-    echo "  CMake konfigurálás (Ninja)…"
+    # A VERSION-t explicit adjuk át. A CMakeLists.txt egyébként a
+    # `git describe --tags --abbrev=0`-ból veszi, ami eltörik, ha bármilyen
+    # nem-verzió tag (pl. egy mentés) frissebb a v2.x.y tageknél.
+    VER=$(git tag -l 'v[0-9]*' --sort=-v:refname --merged HEAD | head -1)
+    VER="${VER#v}"
+    [[ -n "$VER" ]] || VER="0.0.0"
+    REV=$(git rev-parse HEAD)
+    echo "  CMake konfigurálás (Ninja, VERSION=$VER)…"
     cmake -B build -G Ninja \
         -DCMAKE_BUILD_TYPE=Release \
         -DINSTALL_QMLDIR=usr/lib/qt6/qml \
+        -DVERSION="$VER" \
+        -DGIT_REVISION="$REV" \
         || die "a cmake konfigurálás elhasalt"
 fi
 

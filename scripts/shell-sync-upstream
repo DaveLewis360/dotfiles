@@ -43,6 +43,34 @@ warn() { echo "  ${C_WARN}⚠${C_0} $*"; }
 die()  { echo "${C_ERR}Hiba:${C_0} $*" >&2; exit 1; }
 hr()   { echo "════════════════════════════════════════════════════════════"; }
 
+# ------------------------------------------------------------------------------
+# Visszaállítási pontok a refs/backup/ névtérben tárolódnak, NEM refs/tags-ben.
+# Ok: a CMakeLists.txt a verziót a `git describe --tags --abbrev=0`-ból veszi,
+# és egy saját tag elárnyékolná a v2.x.y verziótageket → a build elhasalna
+# ("VERSION format invalid"). A refs/backup/ refeket a git describe nem látja,
+# de a `git reset --hard refs/backup/...` és a `git log` teljesen működik.
+# ------------------------------------------------------------------------------
+BACKUP_NS="refs/backup"
+
+# mkbackupref <név> <commit-ish> <üzenet>  — annotált objektum a refs/backup/ alatt
+mkbackupref() {
+    local name="$1" target="$2" msg="$3"
+    local tmp="__mkbackupref_tmp_$$"
+    git tag -a -f "$tmp" -m "$msg" "$target" >/dev/null
+    git update-ref "$BACKUP_NS/$name" "$(git rev-parse "$tmp")"
+    git tag -d "$tmp" >/dev/null
+}
+
+# listbackuprefs <alnévtér>  — "<rövidnév>|<commit>|<dátum>" sorok, legújabb elöl
+# Kezeli mind az annotált (tag-objektum) mind a közvetlen (commit) refeket:
+# a %(*...) az annotált objektum célját adja, ami közvetlen refnél üres.
+listbackuprefs() {
+    git for-each-ref --sort=-creatordate "$BACKUP_NS/$1" --format="\
+%(refname:lstrip=2)|\
+%(if)%(*objectname)%(then)%(*objectname:short)%(else)%(objectname:short)%(end)|\
+%(if)%(*committerdate)%(then)%(*committerdate:short)%(else)%(committerdate:short)%(end)"
+}
+
 [[ -d "$REPO/.git" ]] || die "Nem git repo: $REPO"
 cd "$REPO"
 
@@ -60,26 +88,30 @@ fi
 if [[ "$MODE" == "list" ]]; then
     hr; info "  Visszaállítási pontok — $(basename "$REPO")"; hr
     echo
-    echo "  ${C_B}pre-merge tagek${C_0} ${C_DIM}(merge előtti állapotok)${C_0}"
-    git for-each-ref --sort=-creatordate refs/tags/pre-merge \
-        --format="    %(refname:short)  →  %(objectname:short)  %(creatordate:short)" \
-        | head -20 || true
-    [[ -z "$(git tag -l 'pre-merge/*')" ]] && echo "    ${C_DIM}(még nincs)${C_0}"
-    echo
-    echo "  ${C_B}restore-point tagek${C_0} ${C_DIM}(kézi mentések)${C_0}"
-    git for-each-ref --sort=-creatordate refs/tags/restore-point \
-        --format="    %(refname:short)  →  %(objectname:short)  %(creatordate:short)" \
-        | head -20 || true
-    [[ -z "$(git tag -l 'restore-point/*')" ]] && echo "    ${C_DIM}(még nincs)${C_0}"
-    echo
-    echo "  ${C_B}archive tagek${C_0} ${C_DIM}(archivált branchek)${C_0}"
-    git for-each-ref --sort=-creatordate refs/tags/archive \
-        --format="    %(refname:short)  →  %(objectname:short)  %(creatordate:short)" \
-        | head -20 || true
-    [[ -z "$(git tag -l 'archive/*')" ]] && echo "    ${C_DIM}(még nincs)${C_0}"
-    echo; hr
+    show_group() {
+        local sub="$1" title="$2" note="$3"
+        echo "  ${C_B}$title${C_0} ${C_DIM}$note${C_0}"
+        local any=0
+        while IFS='|' read -r name sha date; do
+            [[ -z "$name" ]] && continue
+            printf "    %-42s %-10s %s\n" "$name" "$sha" "$date"
+            any=1
+        done < <(listbackuprefs "$sub")
+        [[ "$any" -eq 0 ]] && echo "    ${C_DIM}(még nincs)${C_0}"
+        echo
+    }
+    show_group "pre-merge"     "pre-merge"     "(merge előtti állapotok)"
+    show_group "undo-safety"   "undo-safety"   "(visszavonás előtti állapotok)"
+    show_group "restore-point" "restore-point" "(kézi mentések)"
+    show_group "archive"       "archive"       "(archivált branchek)"
+    hr
     echo "  Visszaállítás egy pontra:"
-    echo "    git -C $REPO reset --hard <tag>"
+    echo "    git -C $REPO reset --hard $BACKUP_NS/<név>"
+    echo "  Egy archivált branch visszahozása:"
+    echo "    git -C $REPO branch <új-név> $BACKUP_NS/archive/<név>"
+    echo
+    echo "  ${C_DIM}Megjegyzés: ezek szándékosan NEM tagek, mert egy saját tag${C_0}"
+    echo "  ${C_DIM}elárnyékolná a v2.x.y verziótageket és eltörné a CMake buildet.${C_0}"
     hr
     exit 0
 fi
@@ -98,15 +130,17 @@ fi
 
 # ------------------------------------------------------------------ undo
 if [[ "$MODE" == "undo" ]]; then
-    LAST_TAG=$(git for-each-ref --sort=-creatordate refs/tags/pre-merge --format='%(refname:short)' | head -1)
-    [[ -n "$LAST_TAG" ]] || die "Nincs pre-merge tag, amire visszaállhatnánk. Lásd: $0 --list"
+    LAST=$(listbackuprefs "pre-merge" | head -1)
+    [[ -n "$LAST" ]] || die "Nincs pre-merge visszaállítási pont. Lásd: $0 --list"
+    LAST_NAME="${LAST%%|*}"
+    LAST_REF="$BACKUP_NS/$LAST_NAME"
 
     hr; info "  MERGE VISSZAVONÁSA"; hr
-    echo "  Repo:          $REPO"
+    echo "  Repo:           $REPO"
     echo "  Jelenlegi HEAD: $(git log -1 --format='%h %s')"
-    echo "  Visszaállítás:  $LAST_TAG → $(git log -1 --format='%h %s' "$LAST_TAG")"
+    echo "  Visszaállítás:  $LAST_NAME → $(git log -1 --format='%h %s' "$LAST_REF")"
     echo
-    LOST=$(git rev-list --count "$LAST_TAG"..HEAD)
+    LOST=$(git rev-list --count "$LAST_REF"..HEAD)
     echo "  ${C_WARN}Ez a művelet eldobja a HEAD utáni $LOST commitot és a nem"
     echo "  committolt változtatásokat is (git reset --hard).${C_0}"
     echo
@@ -120,13 +154,17 @@ if [[ "$MODE" == "undo" ]]; then
 
     # Biztonsági háló: a visszavonás előtti állapotot is elmentjük
     SAFETY="undo-safety/$(date +%Y%m%d_%H%M%S)"
-    git tag -a "$SAFETY" -m "Állapot a --undo előtt" HEAD
-    ok "Biztonsági tag a visszavonás ELŐTTI állapotra: $SAFETY"
+    mkbackupref "$SAFETY" HEAD "Állapot a --undo előtt
 
-    git reset --hard "$LAST_TAG"
-    ok "Visszaállítva: $LAST_TAG"
+HEAD: $(git rev-parse HEAD)
+Visszaállítás ide: $LAST_NAME"
+    ok "Biztonsági pont a visszavonás ELŐTTI állapotra: $SAFETY"
+
+    git reset --hard "$LAST_REF"
+    ok "Visszaállítva: $LAST_NAME"
     echo
-    echo "  ${C_DIM}Ha mégis kellene a visszavont állapot:  git reset --hard $SAFETY${C_0}"
+    echo "  ${C_DIM}Ha mégis kellene a visszavont állapot:${C_0}"
+    echo "  ${C_DIM}  git reset --hard $BACKUP_NS/$SAFETY${C_0}"
     exit 0
 fi
 
@@ -205,14 +243,14 @@ fi
 
 # --- VISSZAÁLLÍTÁSI PONT ---
 TS=$(date +%Y%m%d_%H%M%S)
-PRE_TAG="pre-merge/$TS"
+PRE_NAME="pre-merge/$TS"
 echo
-git tag -a "$PRE_TAG" -m "Állapot a(z) $REF beolvasztása előtt
+mkbackupref "$PRE_NAME" HEAD "Állapot a(z) $REF beolvasztása előtt
 
 HEAD:     $(git rev-parse HEAD)
 Cél:      $REF ($(git rev-parse "$REF"))
 Közös ős: $BASE"
-ok "Visszaállítási pont: ${C_B}$PRE_TAG${C_0}"
+ok "Visszaállítási pont: ${C_B}$PRE_NAME${C_0}"
 echo "    ${C_DIM}visszavonás bármikor:  $0 --undo${C_0}"
 
 # --- MERGE ---
@@ -298,7 +336,7 @@ $(hr)
   A feloldásaidat a rerere megjegyzi — a következő upstream merge-nél
   automatikusan alkalmazza őket.
 
-  Visszaállítási pont: ${C_B}$PRE_TAG${C_0}
+  Visszaállítási pont: ${C_B}$PRE_NAME${C_0}
 $(hr)
 EOF
 exit 1

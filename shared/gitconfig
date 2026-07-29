@@ -32,3 +32,17 @@
 	smudge = git-lfs smudge -- %f
 	process = git-lfs filter-process
 	required = true
+[rerere]
+	enabled = true
+	autoUpdate = true
+[merge]
+	conflictStyle = zdiff3
+	renameLimit = 4000
+	renames = true
+	log = 50
+[diff]
+	algorithm = histogram
+	renameLimit = 4000
+[pull]
+	rebase = false
+	ff = only

@@ -1,0 +1,34 @@
+[include]
+	path = ~/.gitconfig.local
+[hub]
+	protocol = https
+[alias]
+	co = checkout
+	count = !git shortlog -sn
+[color]
+	diff = auto
+	status = auto
+	branch = auto
+	ui = true
+[core]
+	excludesfile = /home/dave/dotfiles/shared/gitignore
+	editor = vim
+[apply]
+	whitespace = nowarn
+[mergetool]
+	keepBackup = false
+[difftool]
+	prompt = false
+[help]
+	autocorrect = 1
+[push]
+	default = simple
+[credential]
+	helper = store
+[init]
+	defaultBranch = main
+[filter "lfs"]
+	clean = git-lfs clean -- %f
+	smudge = git-lfs smudge -- %f
+	process = git-lfs filter-process
+	required = true

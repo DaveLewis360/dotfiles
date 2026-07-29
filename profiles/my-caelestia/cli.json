@@ -1,0 +1,51 @@
+{
+  "wallpaper": {
+    "postHook": "python3 /home/dave/dotfiles/scripts/update_css_vars.py"
+  },
+  "theme": {
+    "enableTerm": false
+  },
+  "toggles": {
+    "communication": {
+      "discord": {
+        "command": [
+          "vesktop",
+          "--enable-transparent-visuals",
+          "--enable-wayland-ime",
+          "--ozone-platform-hint=auto",
+          "--enable-features=WaylandWindowDecorations"
+        ],
+        "match": [
+          {
+            "class": "vesktop"
+          }
+        ]
+      }
+    },
+    "music": {
+      "spotify": {
+        "command": [
+          "zen-browser",
+          "-P",
+          "spotifyWrapper",
+          "--class=spotifyWrapper",
+          "--name=spotifyWrapper",
+          "https://open.spotify.com"
+        ],
+        "match": [
+          {
+            "class": "spotifyWrapper"
+          }
+        ]
+      }
+    }
+  },
+  "record": {
+    "extraArgs": [
+      "-k",
+      "hevc",
+      "-a",
+      "default_output|default_input"
+    ]
+  }
+}

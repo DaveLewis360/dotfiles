@@ -1,0 +1,13 @@
+{
+  "wallpaper": {
+    "postHook": ""
+  },
+  "theme": {
+    "enableTerm": false
+  },
+  "toggles": {
+  },
+  "record": {
+    "extraArgs": []
+  }
+}

@@ -1,0 +1,389 @@
+#!/bin/bash
+# ==============================================================================
+# dotswitch — Unified dotfile & quickshell profile switcher
+# ==============================================================================
+# Usage: dotswitch {profile_name|status|list|active|help}
+# Profiles are stored in ~/dotfiles/profiles/<name>/
+# Each profile has a .meta.json describing its capabilities.
+# ==============================================================================
+
+set -euo pipefail
+
+DOTFILES_DIR="$HOME/dotfiles/profiles"
+SHARED_DIR="$HOME/dotfiles/shared"
+STATE_DIR="$HOME/.local/state/dotfiles"
+QS_CONFIG_DIR="$HOME/.config/quickshell"
+CAELESTIA_CONFIG_DIR="$HOME/.config/caelestia"
+ACTIVE_FILE="$STATE_DIR/active_profile"
+QML_PATH_FILE="$STATE_DIR/qml_import_path"
+LOG_FILE="$STATE_DIR/switch.log"
+mkdir -p "$STATE_DIR"
+
+log() {
+    echo "[$(date '+%H:%M:%S')] $*" >> "$LOG_FILE"
+}
+
+die() {
+    echo "Hiba: $*" >&2
+    exit 1
+}
+
+# --- Read profile metadata ---
+read_meta() {
+    local profile="$1"
+    local key="$2"
+    python3 -c "
+import json, sys
+try:
+    with open('$DOTFILES_DIR/$profile/.meta.json') as f:
+        print(json.load(f).get('$key', ''))
+except Exception:
+    print('')
+"
+}
+
+# --- Config symlinks ---
+CONFIG_ENTRIES=(
+    "hypr:$HOME/.config/hypr"
+    "fish:$HOME/.config/fish"
+    "ghostty:$HOME/.config/ghostty"
+    "foot:$HOME/.config/foot"
+    "kitty:$HOME/.config/kitty"
+    "waybar:$HOME/.config/waybar"
+    "dunst:$HOME/.config/dunst"
+    "rofi:$HOME/.config/rofi"
+    "swaync:$HOME/.config/swaync"
+)
+
+# --- Find available profiles ---
+list_profiles() {
+    for d in "$DOTFILES_DIR"/*/; do
+        name=$(basename "$d")
+        meta="$d/.meta.json"
+        if [[ -f "$meta" ]]; then
+            desc=$(python3 -c "import json; print(json.load(open('$meta')).get('description',''))" 2>/dev/null)
+            echo "  $name  $desc"
+        else
+            echo "  $name  (nincs meta)"
+        fi
+    done
+}
+
+# --- Kill running quickshell ---
+kill_quickshell() {
+    echo "  Folyamatok leállítása..."
+    pkill -x quickshell 2>/dev/null || true
+    pkill -x qs 2>/dev/null || true
+    pkill -f "caelestia shell" 2>/dev/null || true
+    pkill -x waybar 2>/dev/null || true
+    pkill -x dunst 2>/dev/null || true
+    pkill -x swaync 2>/dev/null || true
+    sleep 1
+    pkill -9 -x quickshell 2>/dev/null || true
+    pkill -9 -x qs 2>/dev/null || true
+    pkill -9 -f "caelestia shell" 2>/dev/null || true
+    
+    rm -rf "$HOME/.cache/quickshell/qmlcache" 2>/dev/null || true
+    rm -rf "$HOME/.cache/quickshell/qtpipelinecache-x86_64-little_endian-lp64" 2>/dev/null || true
+    log "QML cache törölve"
+}
+
+# --- Start quickshell for the active profile ---
+start_quickshell() {
+    local profile="$1"
+    local shell_type
+    local qs_source
+    local qml_path
+    
+    shell_type=$(read_meta "$profile" "shell_type")
+    qs_source=$(read_meta "$profile" "quickshell_source")
+    qml_path=$(read_meta "$profile" "qml_import_path")
+
+    # Give Wayland time to clear sockets if we just killed something
+    sleep 0.5
+
+    # Build the environment prefix for quickshell
+    local env_prefix=""
+    if [[ -n "$qml_path" ]]; then
+        env_prefix="QML_IMPORT_PATH=$qml_path"
+    fi
+
+    case "$shell_type" in
+        "caelestia")
+            echo "  Caelestia shell indítása..."
+            mkdir -p "$QS_CONFIG_DIR"
+            if [[ -n "$qs_source" ]]; then
+                ln -sfn "$qs_source" "$QS_CONFIG_DIR/caelestia"
+            fi
+            
+            if command -v caelestia >/dev/null; then
+                 eval "$env_prefix caelestia shell -d >/dev/null 2>&1 &"
+                 log "Caelestia shell indítva (caelestia tool)"
+            else
+                 eval "$env_prefix nohup quickshell -c caelestia >/dev/null 2>&1 &"
+                 log "Caelestia shell indítva (direct quickshell)"
+            fi
+            ;;
+        "end4")
+            echo "  end_4 shell indítása..."
+            mkdir -p "$QS_CONFIG_DIR"
+            if [[ -n "$qs_source" ]]; then
+                ln -sfn "$qs_source" "$QS_CONFIG_DIR/ii"
+            fi
+            eval "$env_prefix nohup quickshell -c ii >/dev/null 2>&1 &"
+            log "end_4 shell indítva"
+            ;;
+        "hyde")
+            echo "  HyDE: waybar használata (quickshell nem indul)"
+            log "HyDE: waybar"
+            ;;
+        *)
+            echo "  ⚠ Ismeretlen shell_type: '$shell_type'. Nem indítunk Quickshell-t."
+            log "Ismeretlen shell_type: $shell_type"
+            ;;
+    esac
+}
+
+# --- Set QML import path from profile ---
+set_qml_path() {
+    local profile="$1"
+    local qml_path
+    qml_path=$(read_meta "$profile" "qml_import_path")
+
+    if [[ -n "$qml_path" ]]; then
+        echo "$qml_path" > "$QML_PATH_FILE"
+        export QML_IMPORT_PATH="$qml_path"
+        log "QML_IMPORT_PATH: $qml_path"
+    else
+        > "$QML_PATH_FILE"
+        log "QML_IMPORT_PATH: (nincs)"
+    fi
+}
+
+# --- Switch config symlinks ---
+switch_configs() {
+    local profile="$1"
+    local meta="$DOTFILES_DIR/$profile/.meta.json"
+    local count=0
+
+    if [[ ! -f "$meta" ]]; then
+        die "Nincs .meta.json a profilban: $profile"
+    fi
+
+    for entry in "${CONFIG_ENTRIES[@]}"; do
+        local subdir="${entry%%:*}"
+        local target="${entry#*:}"
+        local src="$DOTFILES_DIR/$profile/$subdir"
+        
+        # End4 compat: check for 'dots/.config/hypr' etc
+        if [[ ! -d "$src" && -d "$DOTFILES_DIR/$profile/dots/.config/$subdir" ]]; then
+             src="$DOTFILES_DIR/$profile/dots/.config/$subdir"
+        fi
+
+        local should_create=false
+        if [[ -d "$src" ]]; then
+            local enabled
+            enabled=$(python3 -c "
+import json
+try:
+    with open('$meta') as f:
+        cfg = json.load(f).get('configs', {})
+        print(str(cfg.get('$subdir', True)).lower())
+except:
+    print('true')
+" 2>/dev/null || echo "true")
+            [[ "$enabled" == "true" ]] && should_create=true
+        fi
+
+        if [[ "$should_create" == "true" ]]; then
+            mkdir -p "$(dirname "$target")"
+            # ATOMIC SYMLINK: ln -sfn does not require rm first
+            ln -sfn "$src" "$target"
+            echo "  ✓ $subdir"
+            count=$((count + 1))
+        elif [[ -L "$target" ]]; then
+            # Profile doesn't manage this config; remove stale symlink that
+            # dotswitch itself created (points into the profiles dir).
+            local current
+            current=$(readlink "$target")
+            if [[ "$current" == "$DOTFILES_DIR/"* ]]; then
+                rm "$target"
+                echo "  ↺ $subdir (elavult symlink törölve)"
+                log "Elavult symlink törölve: $subdir -> $current"
+            fi
+        fi
+    done
+
+    local hypr_dir="$HOME/.config/hypr"
+    if [[ -d "$hypr_dir" ]]; then
+        echo "  Lua configok generálása/frissítése a .conf fájlokból..."
+        python3 "$HOME/dotfiles/scripts/translate_hypr_lua.py" "$hypr_dir" >/dev/null 2>&1 || true
+        log "Lua configok frissítve"
+    fi
+
+    # Caelestia JSONs
+    local shell_json_src="$DOTFILES_DIR/$profile/shell.json"
+    local cli_json_src="$DOTFILES_DIR/$profile/cli.json"
+    if [[ -f "$shell_json_src" ]]; then
+        mkdir -p "$CAELESTIA_CONFIG_DIR"
+        ln -sfn "$shell_json_src" "$CAELESTIA_CONFIG_DIR/shell.json"
+        echo "  ✓ shell.json"
+        count=$((count + 1))
+    elif [[ -L "$CAELESTIA_CONFIG_DIR/shell.json" ]]; then
+        local current
+        current=$(readlink "$CAELESTIA_CONFIG_DIR/shell.json")
+        if [[ "$current" == "$DOTFILES_DIR/"* ]]; then
+            rm "$CAELESTIA_CONFIG_DIR/shell.json"
+            echo "  ↺ shell.json (elavult symlink törölve)"
+            log "Elavult symlink törölve: shell.json -> $current"
+        fi
+    fi
+    if [[ -f "$cli_json_src" ]]; then
+        mkdir -p "$CAELESTIA_CONFIG_DIR"
+        ln -sfn "$cli_json_src" "$CAELESTIA_CONFIG_DIR/cli.json"
+        echo "  ✓ cli.json"
+        count=$((count + 1))
+    elif [[ -L "$CAELESTIA_CONFIG_DIR/cli.json" ]]; then
+        local current
+        current=$(readlink "$CAELESTIA_CONFIG_DIR/cli.json")
+        if [[ "$current" == "$DOTFILES_DIR/"* ]]; then
+            rm "$CAELESTIA_CONFIG_DIR/cli.json"
+            echo "  ↺ cli.json (elavult symlink törölve)"
+            log "Elavult symlink törölve: cli.json -> $current"
+        fi
+    fi
+
+    log "Configok váltva: $count db"
+}
+
+# --- Reload Hyprland ---
+reload_hypr() {
+    if hyprctl instances >/dev/null 2>&1; then
+        echo "  Hyprland újratöltése..."
+        hyprctl reload 2>/dev/null || true
+        log "Hyprland reload"
+    else
+        echo "  ⚠ Hyprland nem fut, reload elmaradt."
+    fi
+}
+
+# --- Apply terminal colors ---
+apply_colors() {
+    if [[ -f "$HOME/dotfiles/scripts/update_css_vars.py" ]]; then
+        echo "  Színek alkalmazása..."
+        CAELESTIA_WATCHER=1 python3 "$HOME/dotfiles/scripts/update_css_vars.py" 2>/dev/null || true
+        log "Színek alkalmazva"
+    fi
+}
+
+# --- Start profile services ---
+start_services() {
+    local profile="$1"
+    local shell_type
+    shell_type=$(read_meta "$profile" "shell_type")
+
+    case "$shell_type" in
+        "hyde")
+            waybar >/dev/null 2>&1 &
+            dunst >/dev/null 2>&1 &
+            echo "  Waybar + Dunst indítva"
+            ;;
+    esac
+}
+
+# --- State management ---
+set_active() {
+    local profile="$1"
+    echo "$profile" > "$ACTIVE_FILE"
+}
+
+get_active() {
+    if [[ -f "$ACTIVE_FILE" ]]; then
+        cat "$ACTIVE_FILE"
+    else
+        echo ""
+    fi
+}
+
+# ==============================================================================
+# COMMANDS
+# ==============================================================================
+case "${1:-help}" in
+    # --- SWITCH PROFILE ---
+    my-caelestia|mine|caelestia|upstream|stable|git|rolling|end4|hyde)
+        case "$1" in
+            my-caelestia|mine)
+                profile="my-caelestia"
+                desc="Saját Caelestia"
+                ;;
+            stable|caelestia|upstream)
+                profile="stable"
+                desc="Caelestia Stable (v1.6.2)"
+                ;;
+            git|rolling)
+                profile="git"
+                desc="Caelestia Git Rolling (main)"
+                ;;
+            end4)
+                profile="end4"
+                desc="end_4 Illogical Impulse"
+                ;;
+            hyde)
+                profile="hyde"
+                desc="HyDE"
+                ;;
+        esac
+
+        if [[ ! -d "$DOTFILES_DIR/$profile" ]]; then
+            die "Profil nem található: $profile"
+        fi
+
+        echo "════════════════════════════════════════"
+        echo "  Váltás: $desc ($profile)"
+        echo "════════════════════════════════════════"
+
+        kill_quickshell
+        set_qml_path "$profile"
+        switch_configs "$profile"
+        set_active "$profile"
+        
+        start_quickshell "$profile"
+        reload_hypr
+        start_services "$profile"
+        apply_colors
+
+        echo ""
+        echo "  ✓ Aktív profil: $desc"
+        echo "  ⚠ Javasolt Logout/Login a teljes váltáshoz!"
+        echo "════════════════════════════════════════"
+        ;;
+
+    status)
+        echo "════════════════════════════════════════"
+        echo "  DOTFILES RENDSZER ÁLLAPOT"
+        echo "════════════════════════════════════════"
+        active=$(get_active)
+        echo "  Aktív profil: ${active:-ismeretlen}"
+        echo ""
+        echo "  Config symlinkek:"
+        for entry in "${CONFIG_ENTRIES[@]}"; do
+            subdir="${entry%%:*}"
+            target="${entry#*:}"
+            link=$(readlink "$target" 2>/dev/null || echo "nem symlink")
+            echo "    $subdir → $link"
+        done
+        echo ""
+        echo "  Elérhető profilok:"
+        list_profiles
+        echo "════════════════════════════════════════"
+        ;;
+
+    list) list_profiles ;;
+    active) get_active ;;
+    help|--help|-h)
+        echo "Használat: dotswitch {mine|end4|git|stable|status|list|active|help}"
+        ;;
+    *)
+        die "Ismeretlen parancs: $1"
+        ;;
+esac

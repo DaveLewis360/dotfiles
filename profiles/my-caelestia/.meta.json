@@ -1,0 +1,18 @@
+{
+  "name": "My Caelestia",
+  "description": "Saját Caelestia fork egyedi hypr struktúrával, NVIDIA támogatással",
+  "author": "DaveLewis360",
+  "quickshell_source": "/home/dave/Reference/my-caelestia-shell",
+  "qml_import_path": "/home/dave/Reference/my-caelestia-shell/build/qml",
+  "shell_type": "caelestia",
+  "wallpaper_dir": "/home/dave/Pictures/Wallpapers",
+  "configs": {
+    "hypr": true,
+    "fish": true,
+    "ghostty": true,
+    "foot": true,
+    "shell_json": true,
+    "cli_json": true,
+    "ohmyposh": true
+  }
+}

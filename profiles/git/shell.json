@@ -1,0 +1,88 @@
+{
+    "appearance": {
+        "transparency": {
+            "enabled": true
+        }
+    },
+    "background": {
+        "wallpaperEnabled": true
+    },
+    "bar": {
+        "activeWindow": {
+            "compact": true,
+            "inverted": true,
+            "showOnHover": false
+        },
+        "clock": {
+            "background": false,
+            "showDate": true
+        },
+        "popouts": {
+            "activeWindow": false
+        },
+        "scrollActions": {
+            "workspaces": true
+        },
+        "status": {
+            "showAudio": true,
+            "showKbLayout": false,
+            "showMicrophone": true
+        },
+        "tray": {
+            "background": false,
+            "compact": true
+        },
+        "workspaces": {
+            "activeIndicator": true,
+            "showWindows": false,
+            "showWindowsOnSpecialWorkspaces": true
+        }
+    },
+    "general": {
+        "apps": {
+            "terminal": [
+                "/usr/bin/ghostty",
+                "--gtk-single-instance=true"
+            ]
+        }
+    },
+    "launcher": {
+        "showOnHover": false
+    },
+    "services": {
+        "defaultPlayer": "Mozilla zen"
+    },
+    "utilities": {
+        "enabled": true,
+        "quickToggles": [
+            {
+                "enabled": true,
+                "id": "wifi"
+            },
+            {
+                "enabled": true,
+                "id": "bluetooth"
+            },
+            {
+                "enabled": true,
+                "id": "mic"
+            },
+            {
+                "enabled": true,
+                "id": "settings"
+            },
+            {
+                "enabled": true,
+                "id": "gameMode"
+            },
+            {
+                "enabled": true,
+                "id": "dnd"
+            },
+            {
+                "enabled": false,
+                "id": "vpn"
+            }
+        ]
+    }
+}

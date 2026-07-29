@@ -1,0 +1,9 @@
+{
+  "_comment": "Közös (rice-független) beállítások, amiket a dotswitch minden profilra rátesz váltáskor, a profil natív formátumában (lua/conf). Itt egy helyen szerkeszd — minden rice-ban ugyanaz lesz.",
+  "input": {
+    "kb_layout": "hu",
+    "kb_variant": "",
+    "kb_options": "",
+    "numlock_by_default": true
+  }
+}

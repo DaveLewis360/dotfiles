@@ -1,0 +1,31 @@
+# ==============================================================================
+# ~/dotfiles — verziókövetés
+# ==============================================================================
+# Elv: MINDEN saját tartalom (profiles/my-caelestia, profiles/git, shared,
+# scripts, apps) követve van. A beágyazott UPSTREAM klónok nincsenek, mert
+# azoknak saját git történetük van — helyettük a profiles/UPSTREAM.md
+# manifest írja le, honnan és melyik commitról állíthatók vissza.
+# ==============================================================================
+
+# --- Beágyazott upstream git klónok (lásd profiles/UPSTREAM.md) ---
+/profiles/stable/
+/profiles/end4/
+/profiles/hyde/
+/profiles/my-caelestia/shell/
+
+# --- Ideiglenes / szerkesztői szemét ---
+*~
+*.swp
+*.swo
+.DS_Store
+tmp_code_*
+
+# --- Saját mentések: ne kerüljenek a repóba, a git történet a mentés ---
+*.bak
+*.bak-*
+*.orig
+*.rej
+dotswitch.bak-*
+
+# --- Futásidejű / gépspecifikus ---
+*.log

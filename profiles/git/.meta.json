@@ -1,0 +1,20 @@
+{
+  "name": "Caelestia Git (Rolling)",
+  "description": "Caelestia shell legújabb git main branch, rolling release",
+  "author": "caelestia-dots",
+  "quickshell_source": "/home/dave/Reference/caelestia-shell-git",
+  "qml_import_path": "/home/dave/Reference/caelestia-shell-git/build/qml",
+  "shell_type": "caelestia",
+  "wallpaper_dir": "/home/dave/Pictures/Wallpapers",
+  "overlay_target": ".config/caelestia/hypr-user.lua",
+  "overlay_format": "lua",
+  "configs": {
+    "hypr": true,
+    "fish": true,
+    "ghostty": false,
+    "foot": true,
+    "shell_json": true,
+    "cli_json": true,
+    "ohmyposh": false
+  }
+}

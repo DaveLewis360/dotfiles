@@ -1,0 +1,6 @@
+! Xresources - shared across all profiles
+Xft.dpi: 96
+Xft.antialias: true
+Xft.hinting: true
+Xft.hintstyle: hintslight
+Xft.rgba: rgb

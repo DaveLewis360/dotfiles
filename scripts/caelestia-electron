@@ -1,0 +1,3 @@
+#!/usr/bin/env bash
+# Caelestia Electron Wrapper Launcher
+electron /home/dave/dotfiles/scripts/caelestia-electron-wrapper.js "$1" "$2"

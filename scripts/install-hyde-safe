@@ -1,0 +1,109 @@
+#!/bin/bash
+# HyDE Safe Install - Integrálja a HyDE-ot a dotswitch rendszerbe anélkül hogy tönkretenné
+
+set -euo pipefail
+
+HYDE_PROFILE="$HOME/dotfiles/profiles/hyde"
+BACKUP_DIR="$HOME/.local/state/dotfiles/pre-hyde-backup"
+TIMESTAMP=$(date +%Y%m%d_%H%M%S)
+
+echo "════════════════════════════════════════"
+echo "  HyDE Biztonságos Telepítés"
+echo "════════════════════════════════════════"
+echo ""
+
+# Ellenőrzések
+if [[ ! -d "$HYDE_PROFILE" ]]; then
+    echo "❌ Hiba: HyDE profil nem található: $HYDE_PROFILE"
+    exit 1
+fi
+
+# Backup létrehozása
+echo "📦 Backup készítése..."
+mkdir -p "$BACKUP_DIR"
+
+# Mentjük a jelenlegi symlinkeket
+for target in ~/.config/{hypr,fish,kitty,waybar,dunst,rofi,swaync} ~/.local/bin ~/.local/lib ~/.local/share; do
+    if [[ -L "$target" ]] || [[ -d "$target" ]]; then
+        target_name=$(basename "$target")
+        parent_name=$(basename "$(dirname "$target")")
+        backup_path="$BACKUP_DIR/${parent_name}_${target_name}_${TIMESTAMP}"
+        
+        if [[ -L "$target" ]]; then
+            echo "  Symlink: $target → $(readlink "$target")"
+            readlink "$target" > "$backup_path.link"
+        elif [[ -d "$target" ]] && [[ ! -L "$target" ]]; then
+            echo "  ⚠️  Könyvtár (nem symlink): $target"
+            echo "$target" >> "$BACKUP_DIR/existing_dirs_${TIMESTAMP}.txt"
+        fi
+    fi
+done
+
+echo ""
+echo "📋 Telepítési terv:"
+echo ""
+echo "1. A HyDE .local könyvtárai át lesznek másolva (nem linkelve):"
+echo "   - ~/.local/bin/Hyde (és társai)"
+echo "   - ~/.local/lib/hyde/"
+echo "   - ~/.local/share/waybar/modules/"
+echo ""
+echo "2. A HyDE config könyvtára symlinkelve lesz:"
+echo "   - ~/.config/{hypr,waybar,dunst,kitty,rofi,swaync} → hyde/Configs/.config/*"
+echo ""
+echo "3. A jelenlegi dotswitch profil ($(<~/.local/state/dotfiles/active_profile)) megmarad"
+echo ""
+echo "4. A dotswitch szkript frissül, hogy kezelje a .local könyvtárakat"
+echo ""
+
+read -p "Folytatod a telepítést? (y/N): " -n 1 -r
+echo
+if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+    echo "Megszakítva."
+    exit 0
+fi
+
+echo ""
+echo "🔧 HyDE fájlok másolása..."
+
+# .local/bin szkriptek
+mkdir -p ~/.local/bin
+if [[ -d "$HYDE_PROFILE/Configs/.local/bin" ]]; then
+    echo "  Másolás: bin/ szkriptek..."
+    cp -r "$HYDE_PROFILE/Configs/.local/bin/"* ~/.local/bin/
+    # Csak a valós fájlokra chmod, törött symlinkeket skip
+    find ~/.local/bin -type f -exec chmod +x {} \; 2>/dev/null || true
+fi
+
+# .local/lib
+if [[ -d "$HYDE_PROFILE/Configs/.local/lib" ]]; then
+    echo "  Másolás: lib/ könyvtár..."
+    cp -r "$HYDE_PROFILE/Configs/.local/lib" ~/.local/
+fi
+
+# .local/share
+if [[ -d "$HYDE_PROFILE/Configs/.local/share" ]]; then
+    echo "  Másolás: share/ könyvtár..."
+    mkdir -p ~/.local/share
+    cp -r "$HYDE_PROFILE/Configs/.local/share/"* ~/.local/share/
+fi
+
+# .local/state
+if [[ -d "$HYDE_PROFILE/Configs/.local/state" ]]; then
+    echo "  Másolás: state/ könyvtár..."
+    mkdir -p ~/.local/state
+    cp -r "$HYDE_PROFILE/Configs/.local/state/"* ~/.local/state/
+fi
+
+echo ""
+echo "✅ HyDE telepítés kész!"
+echo ""
+echo "════════════════════════════════════════"
+echo "  Következő lépések:"
+echo "════════════════════════════════════════"
+echo ""
+echo "1. Tesztelés: dotswitch hyde"
+echo "2. Ha működik, vissza: dotswitch my-caelestia"
+echo "3. Elemezd a különbségeket és optimalizáld a dotswitch-et"
+echo ""
+echo "Backup helye: $BACKUP_DIR"
+echo ""

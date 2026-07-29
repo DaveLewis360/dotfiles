@@ -1,0 +1,15 @@
+font-family = JetBrainsMono Nerd Font
+font-size = 13
+command = /usr/bin/zsh
+
+# Compatibility
+term = xterm-256color
+
+# Behavior
+window-save-state = never
+window-step-resize = true
+
+# Theme
+config-file = /home/dave/.config/ghostty/current_theme.conf
+background = #000000
+background-opacity = 0.4

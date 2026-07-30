@@ -1,0 +1,96 @@
+#!/usr/bin/env bash
+# ==============================================================================
+# barmode — váltás a vízszintes (fork) és a vertikális (upstream) bar között
+# ==============================================================================
+# A shell élőben újratölti a beállítást, nincs szükség újraindításra.
+#
+# Használat:
+#   barmode              az aktuális mód kiírása
+#   barmode h            vízszintes bar (fork, felső él)
+#   barmode v            vertikális bar (eredeti caelestia, bal él)
+#   barmode toggle       oda-vissza váltás
+# ==============================================================================
+
+set -euo pipefail
+
+CONFIG="${XDG_CONFIG_HOME:-$HOME/.config}/caelestia/extras.json"
+
+c_reset=$'\033[0m'; c_bold=$'\033[1m'; c_dim=$'\033[2m'
+c_green=$'\033[32m'; c_yellow=$'\033[33m'; c_cyan=$'\033[36m'
+
+if [[ ! -f "$CONFIG" ]]; then
+    mkdir -p "$(dirname "$CONFIG")"
+    printf '{\n    "bar": {\n        "horizontal": true\n    }\n}\n' > "$CONFIG"
+    echo "  ${c_dim}létrehozva: $CONFIG${c_reset}"
+fi
+
+read_mode() {
+    python3 -c '
+import json, sys
+try:
+    with open(sys.argv[1]) as f:
+        print("h" if json.load(f).get("bar", {}).get("horizontal", False) else "v")
+except Exception:
+    print("v")
+' "$CONFIG"
+}
+
+write_mode() {
+    python3 -c '
+import json, sys
+path, want = sys.argv[1], sys.argv[2] == "h"
+try:
+    with open(path) as f:
+        data = json.load(f)
+except Exception:
+    data = {}
+data.setdefault("bar", {})["horizontal"] = want
+with open(path, "w") as f:
+    json.dump(data, f, indent=4)
+    f.write("\n")
+' "$CONFIG" "$1"
+}
+
+describe() {
+    if [[ "$1" == "h" ]]; then
+        echo "${c_green}vízszintes${c_reset} ${c_dim}(fork — felső él, custom/bar/HBar.qml)${c_reset}"
+    else
+        echo "${c_cyan}vertikális${c_reset} ${c_dim}(eredeti caelestia — bal él, modules/bar/Bar.qml)${c_reset}"
+    fi
+}
+
+current="$(read_mode)"
+
+case "${1:-}" in
+    "")
+        echo "  Bar mód: $(describe "$current")"
+        echo "  ${c_dim}váltás:  barmode toggle${c_reset}"
+        exit 0
+        ;;
+    h|horizontal|vízszintes|vizszintes) target="h" ;;
+    v|vertical|vertikális|vertikalis)   target="v" ;;
+    toggle|t)  [[ "$current" == "h" ]] && target="v" || target="h" ;;
+    -h|--help|help)
+        sed -n '3,12p' "$0" | sed 's/^# \?//'
+        exit 0
+        ;;
+    *)
+        echo "  ${c_yellow}Ismeretlen mód: $1${c_reset}" >&2
+        echo "  Használható: h | v | toggle" >&2
+        exit 1
+        ;;
+esac
+
+if [[ "$target" == "$current" ]]; then
+    echo "  Már ez az aktív mód: $(describe "$current")"
+    exit 0
+fi
+
+write_mode "$target"
+echo "  ${c_bold}Bar mód${c_reset} → $(describe "$target")"
+
+if pgrep -x qs >/dev/null 2>&1; then
+    echo "  ${c_dim}a shell élőben újratölti (~1 s)${c_reset}"
+else
+    echo "  ${c_yellow}a shell nem fut — indításnál lép érvénybe${c_reset}"
+fi

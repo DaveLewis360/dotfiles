@@ -335,6 +335,71 @@ apply_overlay() {
     fi
 }
 
+# --- Detect which Hyprland config parser a profile needs ---
+# A Hyprland INDULÁSKOR választ parsert: ha van hyprland.lua, azt tölti (Lua
+# parser), különben hyprland.conf-ot (hyprlang). Menet közben NEM tud váltani
+# — a 'hyprctl keyword' ilyenkor ezt mondja:
+#   "keyword can't work with non-legacy parsers. Use eval."
+# Ezért két különböző formátumú profil között újra kell lépni a sessionbe.
+profile_hypr_format() {
+    local profile="$1"
+    local dir="$DOTFILES_DIR/$profile/hypr"
+    [[ -d "$dir" ]] || dir="$DOTFILES_DIR/$profile/Configs/.config/hypr"
+    [[ -d "$dir" ]] || dir="$DOTFILES_DIR/$profile/dots/.config/hypr"
+    if [[ -f "$dir/hyprland.lua" ]]; then
+        echo "lua"
+    elif [[ -f "$dir/hyprland.conf" ]]; then
+        echo "conf"
+    else
+        echo "?"
+    fi
+}
+
+# Amit a FUTÓ Hyprland használ: a configerrors elárulja, ha .lua-t keres,
+# egyébként a betöltött fájl létezéséből következtetünk.
+running_hypr_format() {
+    if ! hyprctl instances >/dev/null 2>&1; then
+        echo "?"
+        return
+    fi
+    # Ha a Lua parser aktív, a 'keyword' hibát ad non-legacy parser miatt
+    if hyprctl keyword general:border_size "$(hyprctl getoption general:border_size -j 2>/dev/null | python3 -c 'import json,sys; print(json.load(sys.stdin)["int"])' 2>/dev/null || echo 1)" 2>&1 | grep -q "non-legacy"; then
+        echo "lua"
+    else
+        echo "conf"
+    fi
+}
+
+# --- Warn if the parser format changes (needs re-login) ---
+check_hypr_format() {
+    local profile="$1"
+    local want running
+    want=$(profile_hypr_format "$profile")
+    running=$(running_hypr_format)
+
+    if [[ "$want" == "?" || "$running" == "?" || "$want" == "$running" ]]; then
+        return 0
+    fi
+
+    echo ""
+    echo "  ════════════════════════════════════════════════════════"
+    echo "  ⚠  ÚJRALÉPÉS KELL A SESSIONBE"
+    echo "  ════════════════════════════════════════════════════════"
+    echo "  A futó Hyprland '$running' formátumú configot használ,"
+    echo "  ez a profil viszont '$want' formátumút."
+    echo ""
+    echo "  A Hyprland INDULÁSKOR választ parsert, és menet közben nem tud"
+    echo "  váltani .lua és .conf között. A symlinkek már a helyükön vannak,"
+    echo "  de a config CSAK újralépés után lép érvénybe."
+    echo ""
+    echo "  Addig a régi config marad aktív, és a 'hyprctl configerrors'"
+    echo "  a hiányzó fájlra fog panaszkodni — ez ilyenkor normális."
+    echo ""
+    echo "  Kilépés:  hyprctl dispatch exit    (vagy Ctrl+Alt+Delete)"
+    echo "  ════════════════════════════════════════════════════════"
+    log "FORMÁTUMVÁLTÁS: futó=$running, cél=$want -> újralépés kell"
+}
+
 # --- Reload Hyprland ---
 reload_hypr() {
     if hyprctl instances >/dev/null 2>&1; then
@@ -430,6 +495,7 @@ case "${1:-help}" in
         reload_hypr
         start_services "$profile"
         apply_colors
+        check_hypr_format "$profile"
 
         echo ""
         echo "  ✓ Aktív profil: $desc"

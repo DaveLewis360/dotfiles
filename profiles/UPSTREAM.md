@@ -75,3 +75,87 @@ A HyDE a démonjait **systemd user unitokként** indítja
 (`hyde-<XDG_SESSION_DESKTOP>-<név>.service` / `.scope`), ezért puszta
 `pkill` nem elég — a `dotswitch` `stop_hyde_units()` függvénye állítja le
 őket profilváltáskor.
+
+
+## Hyprland config-formátum: `.lua` vs `.conf`
+
+| Profil | Formátum | Miért |
+|---|---|---|
+| `my-caelestia` | `.lua` | a caelestia v2 Lua configot használ |
+| `stable` | `.lua` | ugyanaz |
+| `git` | `.lua` | ugyanaz |
+| `end4` | `.lua` | az end-4 dots natívan Lua-alapú |
+| **`hyde`** | **`.conf`** | a HyDE hyprlang-alapú, és a saját eszközei (`hyq`, `hyde-config`, `theme.switch.sh`) `.conf`-ot olvasnak/írnak |
+
+**A Hyprland INDULÁSKOR választ parsert:** ha van `hyprland.lua`, azt tölti be
+(Lua parser), különben `hyprland.conf`-ot (hyprlang). Menet közben **nem tud
+váltani** a kettő között — a `hyprctl keyword` ilyenkor ezt mondja:
+
+```
+keyword can't work with non-legacy parsers. Use eval.
+```
+
+Ezért a `hyde` profilra (vagy onnan vissza) váltás **újralépést igényel a
+sessionbe**. A `dotswitch` ezt észleli (`check_hypr_format`) és kiírja.
+A symlinkek azonnal a helyükre kerülnek, csak a Hyprland config lép
+érvénybe később.
+
+### FONTOS: a HyDE profilra soha ne fusson a Lua-generátor
+
+A `scripts/translate_hypr_lua.py` `.conf`-ból `.lua`-t generál. Ha ez lefut a
+`hyde` profilra, a Hyprland onnantól a generált `hyprland.lua`-t tölti be a
+HyDE `hyprland.conf`-ja HELYETT — és mivel a generátor nem kezeli a HyDE
+`bindd` (leírásos bind) szintaxisát, **114 hibás keybind** keletkezik, a HyDE
+core configja (waybar, env, téma) pedig egyáltalán nem töltődik be.
+
+Pontosan ez tette használhatatlanná a HyDE profilt korábban: 48 generált
+`.lua` fájl volt a `Configs/.config/hypr` alatt, `hyprctl configerrors` 118
+hibát mutatott.
+
+A `dotswitch` már védve van ellene:
+
+```bash
+if [[ -d "$hypr_dir" && "$current_shell_type" != "hyde" ]]; then
+    python3 .../translate_hypr_lua.py "$hypr_dir"
+fi
+```
+
+Ha mégis megjelennének, így lehet kitakarítani:
+
+```bash
+find ~/dotfiles/profiles/hyde/Configs/.config/hypr -name '*.lua' -delete
+hyprctl reload
+```
+
+### A HyDE upstream `/home/khing` hibája
+
+Az upstream HyDE repóban 4 futásidőben olvasott fájl a maintainer home
+útvonalát tartalmazza bedrótozva (ezek auto-generált fájlok, amiket a
+fejlesztő gépén generálva commitoltak):
+
+| Fájl | előfordulás |
+|---|---|
+| `Configs/.config/waybar/style.css` | 2 |
+| `Configs/.config/waybar/includes/includes.json` | 89 |
+| `Configs/.config/dunst/dunstrc` | 6 |
+| `Configs/.config/hyde/wallbash/scripts/cava.sh` | 1 |
+
+Ettől a waybar **el sem indul**:
+
+```
+style.css:16: Failed to import: /home/khing/.local/share/waybar/styles/defaults.css
+hyde-Hyprland-bar.service: Failed with result 'exit-code'
+```
+
+Javítás újraklónozás után:
+
+```bash
+cd ~/dotfiles/profiles/hyde
+for f in Configs/.config/waybar/style.css \
+         Configs/.config/waybar/includes/includes.json \
+         Configs/.config/dunst/dunstrc \
+         Configs/.config/hyde/wallbash/scripts/cava.sh; do
+    sed -i "s|/home/khing|$HOME|g" "$f"
+    git update-index --skip-worktree "$f"   # a klón maradjon tiszta
+done
+```

@@ -70,15 +70,44 @@ list_profiles() {
     done
 }
 
+# --- Stop HyDE's systemd user units ---
+# A HyDE a démonjait systemd user unitokként/scope-okként indítja
+# (hyde-shell app -u hyde-<desktop>-<név>.service/.scope), ezért a puszta
+# pkill nem elég: a unitok futva maradnának a profilváltás után is.
+stop_hyde_units() {
+    local units
+    units=$(systemctl --user list-units --all --plain --no-legend 'hyde-*' 2>/dev/null | awk '{print $1}')
+    if [[ -z "$units" ]]; then
+        return 0
+    fi
+    echo "  HyDE systemd unitok leállítása..."
+    while IFS= read -r u; do
+        [[ -z "$u" ]] && continue
+        systemctl --user stop "$u" >/dev/null 2>&1 || true
+        log "HyDE unit leállítva: $u"
+    done <<< "$units"
+    # A scope-ok nem mindig állnak le stop-ra, ezért reset-failed is kell
+    systemctl --user reset-failed 'hyde-*' >/dev/null 2>&1 || true
+}
+
 # --- Kill running quickshell ---
 kill_quickshell() {
     echo "  Folyamatok leállítása..."
+    stop_hyde_units
     pkill -x quickshell 2>/dev/null || true
     pkill -x qs 2>/dev/null || true
     pkill -f "caelestia shell" 2>/dev/null || true
     pkill -x waybar 2>/dev/null || true
     pkill -x dunst 2>/dev/null || true
     pkill -x swaync 2>/dev/null || true
+    # HyDE által indított további démonok
+    pkill -x hypridle 2>/dev/null || true
+    pkill -x hyprsunset 2>/dev/null || true
+    pkill -f "waybar.py" 2>/dev/null || true
+    pkill -f "wallpaper.sh" 2>/dev/null || true
+    pkill -x nm-applet 2>/dev/null || true
+    pkill -x blueman-applet 2>/dev/null || true
+    pkill -x udiskie 2>/dev/null || true
     sleep 1
     pkill -9 -x quickshell 2>/dev/null || true
     pkill -9 -x qs 2>/dev/null || true

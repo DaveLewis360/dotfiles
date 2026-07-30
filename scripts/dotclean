@@ -48,7 +48,7 @@ TIER1=(
 "$HOME/caelestia-backups/dotfiles-20260601_005241.bundle|266 MB git bundle. A benne lévő HEAD (1fcef558) megvan a ~/dotfiles.bak repóban ÉS fel van töltve a GitHubra (DaveLewis360/dotfiles)."
 "$HOME/caelestia-backups/my-caelestia-shell-20260531_214933.bundle|Git bundle. MINDHÁROM branch-csúcsa (fe89b740, 5a4ca4f8, 7aeb8f9a) elérhető az élő ~/Reference/my-caelestia-shell repóban."
 "$HOME/caelestia-backups/my-caelestia-shell-src-20260531_214933.tar.gz|Ugyanannak a forknak a forráskód-tarballja, aminek a git története megvan."
-"$HOME/.config/hyde.bak-dotswitch-1782870315|310 MB, amiből szinte minden a HyDE letöltött themes/ könyvtára (generált/letöltött tartalom). A tényleges hyde config a profiles/hyde-ban 164 KB."
+"$HOME/.config/hyde.bak-dotswitch-1782870315|Már csak a config.toml van benne (8 KB). A 310 MB téma innen át lett mozgatva a ~/.local/share/hyde-themes alá, ahol a HyDE profil használja."
 "$HOME/ii-original-dots-backup|761 MB, amiből ~761 MB a .local/share/icons (ikontémák, csomagból újratelepíthető). A config-rész összesen ~24 KB."
 "$HOME/.config/ghostty.bak-dotswitch-1785232379|A dotswitch automatikus mentése (2026-07-28). A ghostty config verziókövetve van a ~/dotfiles-ban."
 "$HOME/.config/ghostty.bak-dotswitch-1785318278|A dotswitch automatikus mentése (2026-07-29). Ugyanaz."
@@ -91,6 +91,7 @@ TIER2=(
 # SOHA NE — élő függőségek
 # ==============================================================================
 KEEP=(
+"$HOME/.local/share/hyde-themes|A HyDE 12 letöltött témája (310 MB). A hyde profil ezt használja a Configs/.config/hyde/themes symlinken keresztül. Csak akkor törölhető, ha a hyde profilt véglegesen elhagyod."
 "$HOME/dotfiles|Az élő, verziókövetett dotfiles rendszer."
 "$HOME/Reference/my-caelestia-shell|A saját fork — élő fejlesztés."
 "$HOME/Reference/caelestia-shell|A stable profil quickshell forrása."

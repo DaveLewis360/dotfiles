@@ -257,6 +257,12 @@ except:
     local hypr_dir="$HOME/.config/hypr"
     local current_shell_type
     current_shell_type=$(read_meta "$profile" "shell_type")
+
+    # A közös overlay a Lua-generálás ELŐTT fut, hogy a .conf legyen az egyetlen
+    # igazságforrás: a translator abból állítja elő a .lua-t. Így egy külön
+    # lefuttatott translator sem törli el a közös beállításokat.
+    apply_overlay "$profile"
+
     if [[ -d "$hypr_dir" && "$current_shell_type" != "hyde" ]]; then
         echo "  Lua configok generálása/frissítése a .conf fájlokból..."
         python3 "$HOME/dotfiles/scripts/translate_hypr_lua.py" "$hypr_dir" >/dev/null 2>&1 || true
@@ -313,14 +319,50 @@ apply_overlay() {
     local target="$HOME/$target_rel"
     mkdir -p "$(dirname "$target")"
 
-    if python3 "$HOME/dotfiles/scripts/apply_overlay.py" "$SHARED_DIR/common.json" "$target" "$target_fmt" 2>/dev/null; then
+    # A stderr-t NEM nyomjuk el: az apply_overlay.py ott jelzi, ha egy bind
+    # dispatchere nincs leképezve a profil formátumára. Csendben rossz configot
+    # generálni sokkal rosszabb, mint egy látható figyelmeztetés.
+    local overlay_err
+    overlay_err=$(python3 "$HOME/dotfiles/scripts/apply_overlay.py" \
+        "$SHARED_DIR/common.json" "$target" "$target_fmt" 2>&1 >/dev/null)
+    local overlay_rc=$?
+
+    if [[ $overlay_rc -eq 0 ]]; then
         echo "  ✓ overlay ($target_fmt): közös beállítások → $target_rel"
         log "Overlay alkalmazva: $target ($target_fmt)"
+        if [[ -n "$overlay_err" ]]; then
+            while IFS= read -r line; do
+                [[ -n "$line" ]] && echo "  ⚠ $line"
+            done <<< "$overlay_err"
+            log "Overlay figyelmeztetések: $overlay_err"
+        fi
     else
         echo "  ⚠ overlay hiba: $target_rel"
-        log "Overlay HIBA: $target"
+        [[ -n "$overlay_err" ]] && echo "     $overlay_err"
+        log "Overlay HIBA: $target — $overlay_err"
         return 0
     fi
+
+    # Több profil overlay-célja lehet UGYANAZ a fájl (a caelestia profilok mind a
+    # ~/.config/caelestia/hypr-user.lua-t használják), és azt a my-caelestia profil
+    # is betölti. Ha egy korábbi profil managed blokkja bennemarad, a bindok
+    # MEGDUPLÁZÓDNAK — két egymást kioltó toggle. Ezért minden más profil
+    # célfájljából kitakarítjuk a blokkot.
+    local other other_target other_fmt other_abs
+    for other in "$DOTFILES_DIR"/*/; do
+        other=$(basename "$other")
+        [[ "$other" == "$profile" ]] && continue
+        other_target=$(read_meta "$other" "overlay_target")
+        other_fmt=$(read_meta "$other" "overlay_format")
+        [[ -z "$other_target" || -z "$other_fmt" ]] && continue
+        [[ "$other_target" == "$target_rel" ]] && continue
+        other_abs="$HOME/$other_target"
+        [[ -f "$other_abs" ]] || continue
+        if python3 "$HOME/dotfiles/scripts/apply_overlay.py" --strip \
+                "$other_abs" "$other_fmt" 2>/dev/null; then
+            log "Elavult managed blokk törölve: $other_abs (profil: $other)"
+        fi
+    done
 
     # If the override file is a tracked file inside a profile git repo (HyDE/end4),
     # hide the local change so the repo stays 'pristine' in git status.
@@ -488,7 +530,6 @@ case "${1:-help}" in
         kill_quickshell
         set_qml_path "$profile"
         switch_configs "$profile"
-        apply_overlay "$profile"
         set_active "$profile"
         
         start_quickshell "$profile"

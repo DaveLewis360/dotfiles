@@ -38,6 +38,12 @@ if type(_mod) == "table" then for k, v in pairs(_mod) do _G[k] = v end end
 package.loaded["hardware.gestures"] = nil
 local _mod = require("hardware.gestures")
 if type(_mod) == "table" then for k, v in pairs(_mod) do _G[k] = v end end
+hl.exec_cmd("mkdir -p ~/.config/caelestia && touch -a ~/.config/caelestia/hypr-user.conf")
+do
+    local _p = os.getenv("HOME") .. "/.config/caelestia/hypr-user.lua"
+    local _f = io.open(_p, "r")
+    if _f then _f:close(); dofile(_p) end
+end
 package.loaded["hardware.overlay"] = nil
 local _mod = require("hardware.overlay")
 if type(_mod) == "table" then for k, v in pairs(_mod) do _G[k] = v end end

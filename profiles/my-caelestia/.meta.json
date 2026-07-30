@@ -15,6 +15,6 @@
     "cli_json": true,
     "ohmyposh": true
   },
-  "overlay_target": ".config/hypr/hardware/overlay.lua",
-  "overlay_format": "lua"
+  "overlay_target": ".config/hypr/hardware/overlay.conf",
+  "overlay_format": "conf-hl"
 }

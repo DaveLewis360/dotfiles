@@ -1,6 +1,7 @@
 {
-  "_comment": "Közös (rice-független) beállítások, amiket a dotswitch minden profilra rátesz váltáskor, a profil natív formátumában (lua/conf). Itt egy helyen szerkeszd — minden rice-ban ugyanaz lesz. Az 'input' blokk szabadon bővíthető, egy szint mélységű alblokkok (pl. touchpad) is működnek. Az üres string értékű kulcsokat az overlay kihagyja.",
+  "_comment": "KÖZÖS, rice-független beállítások. A dotswitch minden profilra ráteszi váltáskor, a profil natív formátumában (lua/conf). Itt egy helyen szerkeszd — minden rice-ban ugyanaz lesz. Három szekció: input (beállítások), binds (keybindek), windowrules (ablakszabályok).",
   "input": {
+    "_comment": "Skalárok + egy szint mély alblokkok (pl. touchpad). Az üres string értékű kulcsokat az overlay kihagyja.",
     "kb_layout": "hu",
     "kb_variant": "",
     "kb_options": "",
@@ -9,5 +10,29 @@
     "touchpad": {
       "natural_scroll": true
     }
-  }
+  },
+  "binds": [
+    {
+      "_comment": "Absztrakt forma: keys + dispatcher + args. Az overlay ebből generál conf-ot ÉS lua-t. Ha egy dispatcher nincs leképezve lua-ra, figyelmeztet — akkor adj meg explicit \"lua\" kulcsot. Kikapcsolás: \"enabled\": false.",
+      "description": "Fake fullscreen — a kliens nem tudja meg, hogy teljes képernyős",
+      "keys": "SUPER, Y",
+      "dispatcher": "fullscreenstate",
+      "args": "0 2"
+    }
+  ],
+  "windowrules": [
+    {
+      "_comment": "A match strukturált, mert formátumonként más a szintaxis: igazi Hyprland conf-ban 'class:^(x)$', a translator bemenetében 'match:class ^(x)$'. Kikapcsolás: \"enabled\": false.",
+      "rule": "opacity 1 1 override",
+      "match": {
+        "class": "^(com.mitchellh.ghostty)$"
+      }
+    },
+    {
+      "rule": "no_blur true",
+      "match": {
+        "class": "^(com.mitchellh.ghostty)$"
+      }
+    }
+  ]
 }

@@ -256,11 +256,24 @@ end''')
                         lua_lines.append(f'local _mod = require("{module_name}")')
                         lua_lines.append(f'if type(_mod) == "table" then for k, v in pairs(_mod) do _G[k] = v end end')
                     else:
-                        import os
-                        module_name = os.path.basename(v).replace(".conf", "")
-                        lua_lines.append(f'package.loaded["{module_name}"] = nil')
-                        lua_lines.append(f'local _mod = require("{module_name}")')
-                        lua_lines.append(f'if type(_mod) == "table" then for k, v in pairs(_mod) do _G[k] = v end end')
+                        # A ~/.config/hypr fán KÍVÜLI fájl (pl. ~/.config/caelestia/
+                        # hypr-user.conf). A require() csak a hypr package.path-ban
+                        # keres, ezért ott nem találná meg — dofile kell, létezés-
+                        # ellenőrzéssel, hogy hiányzó fájl ne dobjon hibát.
+                        # Csak a záró kiterjesztést cseréljük — a naiv replace a
+                        # ".config" útvonalrészben is talál (.config → .luaig).
+                        lua_path = v[:-5] + ".lua" if v.endswith(".conf") else v
+                        if lua_path.startswith("~/"):
+                            lua_expr = f'os.getenv("HOME") .. "{lua_path[1:]}"'
+                        elif lua_path.startswith("$HOME/"):
+                            lua_expr = f'os.getenv("HOME") .. "{lua_path[5:]}"'
+                        else:
+                            lua_expr = f'"{lua_path}"'
+                        lua_lines.append('do')
+                        lua_lines.append(f'    local _p = {lua_expr}')
+                        lua_lines.append('    local _f = io.open(_p, "r")')
+                        lua_lines.append('    if _f then _f:close(); dofile(_p) end')
+                        lua_lines.append('end')
                     continue
             
             if v in ("true", "false", "1.0", "0.0"):

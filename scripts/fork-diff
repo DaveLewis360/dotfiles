@@ -1,0 +1,177 @@
+#!/usr/bin/env bash
+# ==============================================================================
+# fork-diff — mit módosít a fork az upstreamhez képest, kockázat szerint
+# ==============================================================================
+# A gitből számol, ezért mindig pontos. Nincs szükség fájlon belüli
+# "[FORK]" jelölőkre — azok csak növelnék a merge-konfliktus felületet.
+#
+# Használat:
+#   fork-diff              összefoglaló + kockázati csoportok
+#   fork-diff --files      fájlonkénti bontás
+#   fork-diff --forecast   konfliktus-előrejelzés a beérkező upstreammel
+#   fork-diff --show <fájl>  egy fájl fork-diffje
+#   fork-diff --repo <path>
+# ==============================================================================
+
+set -euo pipefail
+
+REPO="${HOME}/Reference/my-caelestia-shell"
+MODE="summary"
+FILE=""
+
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --repo)     REPO="$2"; shift 2 ;;
+        --files)    MODE="files"; shift ;;
+        --forecast) MODE="forecast"; shift ;;
+        --show)     MODE="show"; FILE="$2"; shift 2 ;;
+        -h|--help)  sed -n '3,15p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+        *) echo "Ismeretlen opció: $1" >&2; exit 1 ;;
+    esac
+done
+
+C_OK=$'\033[32m'; C_WARN=$'\033[33m'; C_ERR=$'\033[31m'; C_DIM=$'\033[2m'; C_B=$'\033[1m'; C_0=$'\033[0m'
+hr() { echo "═══════════════════════════════════════════════════════════════════"; }
+
+[[ -d "$REPO/.git" ]] || { echo "Nem git repo: $REPO" >&2; exit 1; }
+cd "$REPO"
+git remote get-url upstream >/dev/null 2>&1 || { echo "Nincs 'upstream' remote." >&2; exit 1; }
+
+BASE=$(git merge-base HEAD upstream/main)
+
+# --- kockázati csoport egy fájlútvonalhoz ---
+group_of() {
+    case "$1" in
+        custom/*|CUSTOMIZATIONS.md|.gitignore)
+            echo "0" ;;   # fork-only: nincs konfliktus
+        modules/bar/*|modules/drawers/*|modules/osd/*)
+            echo "1" ;;   # horizontális bar
+        services/Players.qml|utils/Images.qml|components/widgets/CoverArt.qml|modules/lock/Media.qml)
+            echo "2" ;;   # saját funkció
+        modules/background/Wallpaper.qml|services/Wallpapers.qml|modules/nexus/*)
+            echo "3" ;;   # videó wallpaper
+        *)
+            echo "4" ;;   # apró finomítás
+    esac
+}
+
+group_name() {
+    case "$1" in
+        0) echo "fork-only fájl (nincs upstream párja)" ;;
+        1) echo "horizontális bar átalakítás" ;;
+        2) echo "saját funkció" ;;
+        3) echo "videó wallpaper" ;;
+        4) echo "apró finomítás" ;;
+    esac
+}
+
+group_risk() {
+    case "$1" in
+        0) echo "${C_OK}nincs${C_0}" ;;
+        1) echo "${C_ERR}NAGY${C_0}" ;;
+        2) echo "${C_OK}kis${C_0}" ;;
+        3) echo "${C_WARN}közepes${C_0}" ;;
+        4) echo "${C_OK}kis${C_0}" ;;
+    esac
+}
+
+# ------------------------------------------------------------------ show
+if [[ "$MODE" == "show" ]]; then
+    hr; echo "${C_B}  $FILE${C_0}"
+    echo "  csoport: $(group_name "$(group_of "$FILE")")  |  kockázat: $(group_risk "$(group_of "$FILE")")"
+    hr
+    git diff "$BASE" HEAD -- "$FILE"
+    exit 0
+fi
+
+# ------------------------------------------------------------------ forecast
+if [[ "$MODE" == "forecast" ]]; then
+    hr; echo "${C_B}  KONFLIKTUS-ELŐREJELZÉS${C_0}"; hr
+    git fetch upstream --quiet 2>/dev/null || true
+    BASE=$(git merge-base HEAD upstream/main)
+    BEHIND=$(git rev-list --count HEAD..upstream/main)
+    echo "  beérkező upstream commit: $BEHIND"
+    if [[ "$BEHIND" -eq 0 ]]; then
+        echo "  ${C_OK}up to date${C_0}"; hr; exit 0
+    fi
+    echo
+    MINE=$(git diff --name-only "$BASE" HEAD | sort)
+    THEIRS=$(git diff --name-only "$BASE" upstream/main | sort)
+    RISK=$(comm -12 <(echo "$MINE") <(echo "$THEIRS"))
+    if [[ -z "$RISK" ]]; then
+        echo "  ${C_OK}✓ Nincs átfedés — a merge konfliktus nélkül várható.${C_0}"
+    else
+        echo "  ${C_B}Mindkét oldal módosította ($(echo "$RISK" | grep -c .) fájl):${C_0}"
+        echo
+        while IFS= read -r f; do
+            [[ -z "$f" ]] && continue
+            g=$(group_of "$f")
+            m=$(git diff --numstat "$BASE" HEAD -- "$f" | awk '{print "+"$1" -"$2}')
+            t=$(git diff --numstat "$BASE" upstream/main -- "$f" | awk '{print "+"$1" -"$2}')
+            printf "    %-52s\n" "$f"
+            printf "        te: %-14s upstream: %-14s %s\n" "$m" "$t" "$(group_risk "$g")"
+        done <<< "$RISK"
+        echo
+        echo "  ${C_DIM}A rerere gyorsítótár: $(ls -1 .git/rr-cache 2>/dev/null | wc -l) rögzített feloldás${C_0}"
+    fi
+    hr
+    echo "  Merge: shell-sync-upstream --dry-run   majd   shell-sync-upstream"
+    hr
+    exit 0
+fi
+
+# ------------------------------------------------------------------ files
+if [[ "$MODE" == "files" ]]; then
+    hr; echo "${C_B}  FORK-DIFF — fájlonként${C_0}"; hr
+    echo "  bázis: $(git rev-parse --short "$BASE") ($(git log -1 --format=%ad --date=short "$BASE"))"
+    echo
+    for g in 0 1 2 3 4; do
+        rows=""
+        while IFS=$'\t' read -r add del f; do
+            [[ -z "$f" ]] && continue
+            [[ "$(group_of "$f")" == "$g" ]] || continue
+            rows+=$(printf "    %-56s +%-6s -%-6s\n" "$f" "$add" "$del")$'\n'
+        done < <(git diff --numstat "$BASE" HEAD)
+        [[ -z "$rows" ]] && continue
+        echo "  ${C_B}$g. $(group_name "$g")${C_0}  —  kockázat: $(group_risk "$g")"
+        printf "%s" "$rows"
+        echo
+    done
+    hr
+    exit 0
+fi
+
+# ------------------------------------------------------------------ summary
+hr; echo "${C_B}  FORK-DIFF — $(basename "$REPO")${C_0}"; hr
+echo "  upstream: $(git remote get-url upstream)"
+echo "  bázis:    $(git rev-parse --short "$BASE") ($(git log -1 --format=%ad --date=short "$BASE"))"
+echo "  HEAD:     $(git rev-parse --short HEAD) ($(git log -1 --format=%ad --date=short HEAD))"
+echo
+git diff --shortstat "$BASE" HEAD | sed 's/^ */  /'
+echo
+NEW=$(git diff --name-only --diff-filter=A "$BASE" HEAD | wc -l)
+MOD=$(git diff --name-only --diff-filter=M "$BASE" HEAD | wc -l)
+DEL=$(git diff --name-only --diff-filter=D "$BASE" HEAD | wc -l)
+HUNKS=$(git diff -U0 "$BASE" HEAD | grep -c '^@@' || true)
+echo "  ${C_OK}$NEW${C_0} új fork-fájl        ${C_DIM}(nulla konfliktus-kockázat)${C_0}"
+echo "  ${C_WARN}$MOD${C_0} módosított upstream fájl   ${C_DIM}($HUNKS hunk — ez a valódi merge-felület)${C_0}"
+[[ "$DEL" -gt 0 ]] && echo "  ${C_ERR}$DEL${C_0} törölt upstream fájl"
+echo
+echo "  ${C_B}Kockázati csoportok${C_0}"
+for g in 0 1 2 3 4; do
+    n=0; a=0; d=0
+    while IFS=$'\t' read -r add del f; do
+        [[ -z "$f" ]] && continue
+        [[ "$(group_of "$f")" == "$g" ]] || continue
+        n=$((n+1)); [[ "$add" == "-" ]] || a=$((a+add)); [[ "$del" == "-" ]] || d=$((d+del))
+    done < <(git diff --numstat "$BASE" HEAD)
+    [[ "$n" -eq 0 ]] && continue
+    printf "    %-38s %2d fájl  +%-5s -%-5s %s\n" "$(group_name "$g")" "$n" "$a" "$d" "$(group_risk "$g")"
+done
+echo
+hr
+echo "  fork-diff --files      fájlonkénti bontás"
+echo "  fork-diff --forecast   mi fog ütközni a következő merge-nél"
+echo "  fork-diff --show <f>   egy fájl diffje"
+echo "  Részletes leírás: $REPO/CUSTOMIZATIONS.md"
+hr

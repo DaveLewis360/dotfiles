@@ -34,3 +34,6 @@ dotswitch.bak-*
 # A default.conf / default.lua KÖVETVE van, csak az aktuális állapot nem.
 profiles/*/hypr/scheme/current.conf
 profiles/*/hypr/scheme/current.lua
+
+# --- Generált terminál-témák (update_css_vars.py írja a wallpaper színeiből) ---
+profiles/*/ghostty/current_theme.conf

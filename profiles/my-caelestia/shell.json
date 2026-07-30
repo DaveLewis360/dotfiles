@@ -469,6 +469,9 @@
         "enabled": true
     },
     "utilities": {
+        "cards": {
+            "keepAwake": true
+        },
         "enabled": true,
         "maxToasts": 4,
         "toasts": {

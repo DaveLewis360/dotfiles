@@ -38,3 +38,6 @@ if type(_mod) == "table" then for k, v in pairs(_mod) do _G[k] = v end end
 package.loaded["hardware.gestures"] = nil
 local _mod = require("hardware.gestures")
 if type(_mod) == "table" then for k, v in pairs(_mod) do _G[k] = v end end
+package.loaded["hardware.overlay"] = nil
+local _mod = require("hardware.overlay")
+if type(_mod) == "table" then for k, v in pairs(_mod) do _G[k] = v end end

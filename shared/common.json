@@ -1,9 +1,13 @@
 {
-  "_comment": "Közös (rice-független) beállítások, amiket a dotswitch minden profilra rátesz váltáskor, a profil natív formátumában (lua/conf). Itt egy helyen szerkeszd — minden rice-ban ugyanaz lesz.",
+  "_comment": "Közös (rice-független) beállítások, amiket a dotswitch minden profilra rátesz váltáskor, a profil natív formátumában (lua/conf). Itt egy helyen szerkeszd — minden rice-ban ugyanaz lesz. Az 'input' blokk szabadon bővíthető, egy szint mélységű alblokkok (pl. touchpad) is működnek. Az üres string értékű kulcsokat az overlay kihagyja.",
   "input": {
     "kb_layout": "hu",
     "kb_variant": "",
     "kb_options": "",
-    "numlock_by_default": true
+    "numlock_by_default": true,
+    "natural_scroll": true,
+    "touchpad": {
+      "natural_scroll": true
+    }
   }
 }

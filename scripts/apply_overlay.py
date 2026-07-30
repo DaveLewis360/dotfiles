@@ -3,36 +3,77 @@
 
 A közös (rice-független) beállításokat (~/dotfiles/shared/common.json) ráteszi a profil
 user-override fájljára egy "managed block" formában, a profil natív formátumában:
-  - lua:  hl.config({ input = { kb_layout = "hu", ... } })   (caelestia, end4)
-  - conf: input { kb_layout = hu ... }                        (HyDE)
+  - lua:  hl.config({ input = { kb_layout = "hu", touchpad = { ... } } })   (caelestia, end4)
+  - conf: input { kb_layout = hu ... touchpad { ... } }                     (HyDE)
 
 Idempotens: minden futáskor eltávolítja a korábbi managed blokkot, majd újat ír.
 A managed blokkon kívüli (felhasználói) tartalmat érintetlenül hagyja.
+
+A common.json "input" blokkja SZABADON bővíthető: minden skalár kulcs átkerül, és
+egy szint mélységű alblokkokat (pl. touchpad) is kezel. Az üres string értékű
+kulcsokat kihagyja, így a "kb_variant": "" nem ír felesleges sort.
 
 Használat: apply_overlay.py <common.json> <target_file> <lua|conf>
 """
 import json
 import sys
 
+# Ezek nem beállítások, hanem dokumentáció a common.json-ban.
+IGNORED_KEYS = ("_comment",)
+
+
+def fmt_value(v, fmt: str) -> str:
+    """Egy skalár érték a cél formátum szerint."""
+    if isinstance(v, bool):
+        return "true" if v else "false"
+    if isinstance(v, (int, float)):
+        return str(v)
+    # string
+    return f'"{v}"' if fmt == "lua" else str(v)
+
+
+def emit(d: dict, fmt: str, indent: int) -> list[str]:
+    """Rekurzívan (egy szint mélyen) kiírja a kulcs-érték párokat."""
+    pad = " " * indent
+    scalars, blocks = [], []
+
+    for k, v in d.items():
+        if k in IGNORED_KEYS:
+            continue
+        if isinstance(v, dict):
+            blocks.append((k, v))
+            continue
+        # Az üres stringet szándékosan kihagyjuk (pl. kb_variant: "")
+        if isinstance(v, str) and v == "":
+            continue
+        if fmt == "lua":
+            scalars.append(f"{pad}{k} = {fmt_value(v, fmt)},")
+        else:
+            scalars.append(f"{pad}{k} = {fmt_value(v, fmt)}")
+
+    lines = list(scalars)
+    for name, sub in blocks:
+        inner = emit(sub, fmt, indent + 4)
+        if not inner:
+            continue
+        if fmt == "lua":
+            lines.append(f"{pad}{name} = {{")
+            lines.extend(inner)
+            lines.append(f"{pad}}},")
+        else:
+            lines.append(f"{pad}{name} {{")
+            lines.extend(inner)
+            lines.append(f"{pad}}}")
+    return lines
+
 
 def build_body(inp: dict, fmt: str) -> str:
-    kv = [(k, inp.get(k, "")) for k in ("kb_layout", "kb_variant", "kb_options")]
-    kv = [(k, v) for k, v in kv if v != ""]
-    numlock = inp.get("numlock_by_default")
-
-    if not kv and not isinstance(numlock, bool):
+    inner = emit(inp, fmt, 8 if fmt == "lua" else 4)
+    if not inner:
         return ""
-
     if fmt == "lua":
-        inner = [f'        {k} = "{v}",' for k, v in kv]
-        if isinstance(numlock, bool):
-            inner.append(f"        numlock_by_default = {'true' if numlock else 'false'},")
         return "hl.config({\n    input = {\n" + "\n".join(inner) + "\n    }\n})"
-    else:  # conf
-        inner = [f"    {k} = {v}" for k, v in kv]
-        if isinstance(numlock, bool):
-            inner.append(f"    numlock_by_default = {'true' if numlock else 'false'}")
-        return "input {\n" + "\n".join(inner) + "\n}"
+    return "input {\n" + "\n".join(inner) + "\n}"
 
 
 def main() -> int:

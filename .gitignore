@@ -37,3 +37,9 @@ profiles/*/hypr/scheme/current.lua
 
 # --- Generált terminál-témák (update_css_vars.py írja a wallpaper színeiből) ---
 profiles/*/ghostty/current_theme.conf
+
+# --- A dotswitch overlay által generált fájl ---
+# A hardware/overlay.conf (a dokumentált placeholder) KÖVETVE van, a belőle
+# generált .lua nem — azt minden profilváltáskor újraírja az apply_overlay.py
+# a shared/common.json-ből.
+profiles/*/hypr/hardware/overlay.lua

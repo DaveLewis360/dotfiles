@@ -132,7 +132,7 @@
             "activeLabel": "󰮯",
             "activeTrail": false,
             "capitalisation": "preserve",
-            "label": "  ",
+            "label": "",
             "maxWindowIcons": 5,
             "occupiedBg": false,
             "occupiedLabel": "󰮯",

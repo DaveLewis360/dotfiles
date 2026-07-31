@@ -363,6 +363,37 @@ else
     hint "javítás: sudo ~/dotfiles/scripts/fix-oom-freeze"
 fi
 
+# ── 11. Pacman adatbázis épsége ─────────────────────────────────────────────
+# Egy félbeszakadt tranzakció (kényszerített újraindítás, OOM-fagyás) olyan
+# csomagbejegyzést hagyhat hátra, amiből hiányzik a desc/files metaadat. A
+# pacman ilyenkor a KÖVETKEZŐ frissítést is megtagadja ("nem sikerült
+# felkészülni a tranzakcióra"), miközben a hiba oka teljesen máshol keletkezett.
+section "Pacman adatbázis"
+PACDB=/var/lib/pacman/local
+if [[ -d $PACDB ]]; then
+    broken=""
+    for d in "$PACDB"/*/; do
+        [[ -d $d ]] || continue
+        if [[ ! -f "$d/desc" || ! -f "$d/files" ]]; then
+            broken+="${broken:+ }$(basename "$d")"
+        fi
+    done
+    if [[ -z $broken ]]; then
+        pass "mind a $(find "$PACDB" -mindepth 1 -maxdepth 1 -type d | wc -l) csomagbejegyzés ép"
+    else
+        for pkg in $broken; do
+            fail "sérült csomagbejegyzés: $pkg (hiányzó desc/files)"
+        done
+        hint "ez megállítja a következő pacman -Syu-t; javítás:"
+        hint "  sudo mv $PACDB/<pkg> /var/lib/pacman/<pkg>.broken"
+        hint "  sudo pacman -S <csomagnév>   # ütközésnél szűkített --overwrite kell"
+        hint "a birtokolt fájlok a megmaradt mtree-ből kiolvashatók:"
+        hint "  zcat $PACDB/<pkg>/mtree | grep -v '^#' | awk '{print \$1}'"
+    fi
+else
+    warn "$PACDB nem található — nem Arch-alapú rendszer?"
+fi
+
 # ── Összegzés ───────────────────────────────────────────────────────────────
 echo
 echo "═══════════════════════════════════════════════════════════════════"

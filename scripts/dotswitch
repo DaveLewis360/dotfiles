@@ -69,6 +69,40 @@ list_profiles() {
     done
 }
 
+# --- Universal app configs (rice-independent) ---
+# Az apps/<app>/<fájl> a RICE-FÜGGETLEN app-beállítások helye: ezek nem
+# változnak profilváltáskor, mert nem a rice-hoz tartoznak, hanem hozzád.
+# Példa: a btop theme_background=false, ami nélkül a btop opak hátteret fest a
+# ghostty áttetszősége fölé.
+#
+# Csak FÁJLOKAT linkel, nem könyvtárakat — az appok az adott könyvtárba
+# állapotot is írnak (pl. a btop generált témáit), azt nem szabad elnyomni.
+link_universal_apps() {
+    local apps_dir="$HOME/dotfiles/apps"
+    [[ -d "$apps_dir" ]] || return 0
+
+    local linked=0 app rel target src
+    while IFS= read -r src; do
+        rel="${src#$apps_dir/}"          # pl. btop/btop.conf
+        target="$HOME/.config/$rel"
+        mkdir -p "$(dirname "$target")"
+
+        if [[ -L "$target" && "$(readlink -f "$target")" == "$(readlink -f "$src")" ]]; then
+            continue                      # már jól van bekötve
+        fi
+        if [[ -e "$target" && ! -L "$target" ]]; then
+            mv "$target" "$target.pre-dotfiles-$(date +%Y%m%d_%H%M%S)"
+            log "Univerzális app-config mentve: $target"
+        fi
+        ln -sfn "$src" "$target"
+        log "Univerzális app-config bekötve: $rel"
+        linked=$((linked + 1))
+    done < <(find "$apps_dir" -type f 2>/dev/null)
+
+    [[ $linked -gt 0 ]] && echo "  ✓ univerzális app-configok: $linked bekötve"
+    return 0
+}
+
 # --- Kill running quickshell ---
 kill_quickshell() {
     echo "  Folyamatok leállítása..."
@@ -231,6 +265,7 @@ except:
     # igazságforrás: a translator abból állítja elő a .lua-t. Így egy külön
     # lefuttatott translator sem törli el a közös beállításokat.
     apply_overlay "$profile"
+    link_universal_apps
 
     if [[ -d "$hypr_dir" ]]; then
         echo "  Lua configok generálása/frissítése a .conf fájlokból..."

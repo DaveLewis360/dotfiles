@@ -1,0 +1,377 @@
+#!/usr/bin/env python3
+"""prefs-compare — mit jelent ugyanaz a gomb a különböző rice-okban?
+
+Ez a demó/elemző eszköz kiolvassa MINDEN profil keybindjeit, feloldja a
+változóikat, és megmutatja:
+
+  1. AZONOS      — ugyanaz a gomb ugyanazt teszi mindenhol (nincs mit tenni)
+  2. ÜTKÖZIK     — ugyanaz a gomb MÁST tesz  ← ezt oldja meg az univerzális réteg
+  3. CSAK EGYBEN — csak az egyik rice-ban létezik
+  4. AKCIÓ-TÉRKÉP — absztrakt akció → melyik rice hogyan valósítja meg
+
+Használat:
+  prefs-compare                 összefoglaló
+  prefs-compare --conflicts     csak az ütközések (a döntendő lista)
+  prefs-compare --actions       az akció-térkép (a 2. szint alapja)
+  prefs-compare --profile <p>   egy profil összes bindja
+  prefs-compare --decide        CSAK a döntendő lista (interjúhoz)
+"""
+import json
+import re
+import sys
+from pathlib import Path
+
+PROFILES_DIR = Path.home() / "dotfiles" / "profiles"
+
+C = {
+    "reset": "\033[0m", "bold": "\033[1m", "dim": "\033[2m",
+    "red": "\033[31m", "green": "\033[32m", "yellow": "\033[33m",
+    "blue": "\033[34m", "cyan": "\033[36m",
+}
+if not sys.stdout.isatty():
+    C = {k: "" for k in C}
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+#  Kulcs-normalizálás — hogy a "Super+Shift, S" és a "SUPER + SHIFT + S"
+#  ugyanannak számítson.
+# ─────────────────────────────────────────────────────────────────────────────
+
+MOD_ALIASES = {
+    "SUPER": "SUPER", "SUPER_L": "SUPER", "SUPER_R": "SUPER", "MOD4": "SUPER",
+    "CTRL": "CTRL", "CONTROL": "CTRL",
+    "ALT": "ALT", "MOD1": "ALT",
+    "SHIFT": "SHIFT",
+}
+MOD_ORDER = ["CTRL", "ALT", "SHIFT", "SUPER"]
+
+
+def normalise_combo(raw: str) -> str | None:
+    """'Super+Shift, S' / 'SUPER + SHIFT + S' → 'CTRL?ALT?SHIFT?SUPER+KEY'."""
+    if not raw:
+        return None
+    s = raw.strip().strip('"').strip("'")
+    s = s.replace(",", "+")
+    parts = [p.strip().upper() for p in s.split("+") if p.strip()]
+    if not parts:
+        return None
+    mods, keys = [], []
+    for p in parts:
+        if p in MOD_ALIASES:
+            m = MOD_ALIASES[p]
+            if m not in mods:
+                mods.append(m)
+        else:
+            keys.append(p)
+    if not keys:
+        # csak modifier (pl. a launcher a puszta SUPER-en)
+        keys = [parts[-1]]
+        mods = [m for m in mods if m != MOD_ALIASES.get(parts[-1], "")]
+    mods.sort(key=lambda m: MOD_ORDER.index(m) if m in MOD_ORDER else 99)
+    return "+".join(mods + keys)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+#  Akció-normalizálás — a különböző rice-ok más néven hívják ugyanazt.
+# ─────────────────────────────────────────────────────────────────────────────
+
+ACTION_PATTERNS = [
+    (r"caelestia:launcher|quickshell:searchToggle|fuzzel|rofi -show drun", "launcher"),
+    (r"caelestia:session|quickshell:sessionToggle|wlogout",                "session menü"),
+    (r"caelestia:clearNotifs|quickshell:.*[Nn]otif",                       "értesítések törlése"),
+    (r"caelestia:sidebar|quickshell:sidebar",                              "sidebar"),
+    (r"caelestia:dashboard|quickshell:dashboard|overview",                 "dashboard"),
+    (r"caelestia:lock|hyprlock|quickshell:lock",                           "képernyő zárolás"),
+    (r"caelestia:screenshot|grim|hyprshot|screenshot",                     "képernyőkép"),
+    (r"toggle specialws|toggle_special",                                   "special workspace"),
+    (r"toggle sysmon|btop",                                                "rendszermonitor"),
+    (r"toggle music|spotify|mpris",                                        "zene"),
+    (r"toggle communication|discord|vesktop",                              "kommunikáció"),
+    (r"window\.close|killactive",                                          "ablak bezárása"),
+    (r"fullscreen_state|fullscreenstate",                                  "fake fullscreen"),
+    (r"window\.fullscreen|fullscreen",                                     "fullscreen"),
+    (r"toggle_floating|togglefloating",                                    "lebegő ablak"),
+    (r"window\.pin\(|[^a-z]pin[^a-z]",                                     "ablak kitűzése"),
+    (r"exec_cmd.*terminal|ghostty|foot|kitty|alacritty",                   "terminál"),
+    (r"exec_cmd.*browser|zen-browser|brave|firefox",                       "böngésző"),
+    (r"exec_cmd.*editor|codium|kiro|code",                                 "szerkesztő"),
+    (r"nautilus|thunar|dolphin|fileExplorer",                              "fájlkezelő"),
+    (r"volume|DEFAULT_AUDIO_SINK|wpctl",                                   "hangerő"),
+    (r"brightness|backlight|brightnessctl",                                "fényerő"),
+    (r"workspace",                                                         "workspace váltás"),
+]
+
+
+def classify(payload: str) -> str | None:
+    for pattern, name in ACTION_PATTERNS:
+        if re.search(pattern, payload, re.IGNORECASE):
+            return name
+    return None
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+#  Parserek
+# ─────────────────────────────────────────────────────────────────────────────
+
+def load_conf_vars(path: Path) -> dict[str, str]:
+    """$name = value sorok a definitions.conf-ból."""
+    out: dict[str, str] = {}
+    if not path.is_file():
+        return out
+    for line in path.read_text(errors="replace").splitlines():
+        m = re.match(r"^\s*\$(\w+)\s*=\s*(.+?)\s*$", line)
+        if m:
+            out[m.group(1)] = m.group(2)
+    # egymásra hivatkozó változók feloldása (pl. $shiftMod = $mainMod+Shift)
+    for _ in range(4):
+        for k, v in list(out.items()):
+            def sub(mo):
+                return out.get(mo.group(1), mo.group(0))
+            out[k] = re.sub(r"\$(\w+)", sub, v)
+    return out
+
+
+def parse_conf_binds(path: Path, variables: dict[str, str]) -> list[dict]:
+    binds = []
+    if not path.is_file():
+        return binds
+    for line in path.read_text(errors="replace").splitlines():
+        line = line.split("#")[0].rstrip()
+        m = re.match(r"^\s*bind[lrenmts]*\s*=\s*(.+)$", line)
+        if not m:
+            continue
+        body = m.group(1)
+        body = re.sub(r"\$(\w+)", lambda mo: variables.get(mo.group(1), mo.group(0)), body)
+        fields = [f.strip() for f in body.split(",")]
+        if len(fields) < 2:
+            continue
+        combo = normalise_combo(f"{fields[0]}+{fields[1]}") if fields[1] else normalise_combo(fields[0])
+        payload = ", ".join(fields[2:]) if len(fields) > 2 else ""
+        if combo:
+            binds.append({"combo": combo, "payload": payload or "(nincs)"})
+    return binds
+
+
+def load_lua_vars(paths: list[Path]) -> dict[str, str]:
+    out: dict[str, str] = {}
+    for path in paths:
+        if not path.is_file():
+            continue
+        for line in path.read_text(errors="replace").splitlines():
+            m = re.match(r'^\s*(?:local\s+)?(?:\w+\.)?(\w+)\s*=\s*"([^"]+)"', line)
+            if m:
+                out[m.group(1)] = m.group(2)
+    return out
+
+
+def parse_lua_binds(path: Path, variables: dict[str, str]) -> list[dict]:
+    binds = []
+    if not path.is_file():
+        return binds
+    text = path.read_text(errors="replace")
+    for m in re.finditer(r'hl\.bind\(\s*(.+?)\s*,\s*(hl\.dsp\..+?)\s*(?:,\s*\{.*?\})?\s*\)\s*$',
+                         text, re.MULTILINE):
+        key_expr, payload = m.group(1), m.group(2)
+        km = re.match(r'^"([^"]+)"$', key_expr)
+        if km:
+            combo = normalise_combo(km.group(1))
+        else:
+            vm = re.search(r"(?:vars\.|_G\[\")?(\w+)", key_expr)
+            combo = normalise_combo(variables.get(vm.group(1), "")) if vm else None
+        if combo:
+            binds.append({"combo": combo, "payload": payload})
+    return binds
+
+
+def collect(profile: str) -> list[dict]:
+    root = PROFILES_DIR / profile
+    if not root.is_dir():
+        return []
+
+    conf = root / "hypr" / "core" / "binds.conf"
+    if conf.is_file():
+        variables = load_conf_vars(root / "hypr" / "core" / "definitions.conf")
+        return parse_conf_binds(conf, variables)
+
+    for rel in ("hypr/hyprland/keybinds.lua", "dots/.config/hypr/hyprland/keybinds.lua"):
+        lua = root / rel
+        if lua.is_file():
+            var_paths = [
+                root / "hypr" / "variables.lua",
+                root / "dots" / ".config" / "hypr" / "hyprland" / "variables.lua",
+                root / "dots" / ".config" / "hypr" / "custom" / "variables.lua",
+            ]
+            binds = parse_lua_binds(lua, load_lua_vars(var_paths))
+            custom = root / "dots" / ".config" / "hypr" / "custom" / "keybinds.lua"
+            if custom.is_file():
+                binds += parse_lua_binds(custom, load_lua_vars(var_paths))
+            return binds
+    return []
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+
+def profiles() -> list[str]:
+    if not PROFILES_DIR.is_dir():
+        return []
+    return sorted(p.name for p in PROFILES_DIR.iterdir()
+                  if p.is_dir() and (p / ".meta.json").is_file())
+
+
+def build() -> tuple[dict, dict]:
+    data = {p: collect(p) for p in profiles()}
+    table: dict[str, dict[str, str]] = {}
+    for prof, binds in data.items():
+        for b in binds:
+            table.setdefault(b["combo"], {}).setdefault(prof, b["payload"])
+    return data, table
+
+
+def hdr(text: str) -> None:
+    print(f"\n{C['bold']}  {text}{C['reset']}")
+    print("  " + "─" * 66)
+
+
+def main() -> int:
+    mode = "summary"
+    target = None
+    args = sys.argv[1:]
+    if args:
+        if args[0] == "--conflicts":
+            mode = "conflicts"
+        elif args[0] == "--actions":
+            mode = "actions"
+        elif args[0] == "--decide":
+            mode = "decide"
+        elif args[0] == "--profile":
+            mode = "profile"
+            target = args[1] if len(args) > 1 else None
+        elif args[0] in ("-h", "--help"):
+            print(__doc__)
+            return 0
+        else:
+            print(f"Ismeretlen opció: {args[0]}", file=sys.stderr)
+            return 2
+
+    data, table = build()
+    if not data:
+        print("Nem találtam profilokat.", file=sys.stderr)
+        return 2
+
+    profs = list(data.keys())
+
+    print("═" * 70)
+    print(f"{C['bold']}  PREFS-COMPARE — mit jelent ugyanaz a gomb a rice-okban?{C['reset']}")
+    print("═" * 70)
+    for p in profs:
+        print(f"  {p:<16} {len(data[p]):>4} bind")
+
+    if mode == "profile":
+        if target not in data:
+            print(f"\n  Nincs ilyen profil: {target}", file=sys.stderr)
+            return 2
+        hdr(f"{target} — összes bind")
+        for b in sorted(data[target], key=lambda x: x["combo"]):
+            print(f"  {C['cyan']}{b['combo']:<26}{C['reset']} {b['payload'][:60]}")
+        return 0
+
+    same, conflict, only = [], [], []
+    for combo, per in sorted(table.items()):
+        present = [p for p in profs if p in per]
+        if len(present) == 1:
+            only.append((combo, present[0], per[present[0]]))
+        else:
+            acts = {classify(per[p]) or per[p][:40] for p in present}
+            (same if len(acts) == 1 else conflict).append((combo, per, present))
+
+    if mode in ("summary", "conflicts"):
+        hdr(f"ÜTKÖZIK — ugyanaz a gomb mást tesz  ({len(conflict)} db)")
+        print(f"  {C['dim']}Ezeket oldja meg az univerzális réteg.{C['reset']}\n")
+        for combo, per, present in conflict:
+            print(f"  {C['yellow']}{combo}{C['reset']}")
+            for p in present:
+                act = classify(per[p])
+                label = f"{C['green']}{act}{C['reset']}" if act else f"{C['dim']}{per[p][:46]}{C['reset']}"
+                print(f"      {p:<16} {label}")
+            print()
+
+    if mode == "summary":
+        hdr(f"AZONOS — már mindenhol ugyanaz  ({len(same)} db)")
+        for combo, per, present in same[:12]:
+            act = classify(per[present[0]]) or per[present[0]][:40]
+            print(f"  {C['green']}{combo:<26}{C['reset']} {act}")
+        if len(same) > 12:
+            print(f"  {C['dim']}… és további {len(same) - 12}{C['reset']}")
+
+        hdr(f"CSAK EGY RICE-BAN  ({len(only)} db)")
+        from collections import Counter
+        for prof, n in Counter(p for _, p, _ in only).most_common():
+            print(f"  {prof:<16} {n:>4} egyedi bind")
+
+    if mode == "decide":
+        actions: dict[str, dict[str, tuple[str, str]]] = {}
+        for prof, binds in data.items():
+            for b in binds:
+                act = classify(b["payload"])
+                if act:
+                    actions.setdefault(act, {}).setdefault(prof, (b["combo"], b["payload"]))
+
+        agreed, differ = [], []
+        for act, per in actions.items():
+            if len(per) < len(profs):
+                continue
+            combos = {c for c, _ in per.values()}
+            (agreed if len(combos) == 1 else differ).append((act, per, combos))
+
+        hdr(f"DÖNTENDŐ — mindenhol létezik, de MÁS gombon  ({len(differ)} db)")
+        print(f"  {C['dim']}Ezeknél kell választanod egy gombot, ami mindenhol az lesz.{C['reset']}\n")
+        for act, per, combos in sorted(differ):
+            print(f"  {C['bold']}{act}{C['reset']}")
+            for p in profs:
+                combo, _ = per[p]
+                print(f"      {C['cyan']}{combo:<24}{C['reset']} {C['dim']}{p}{C['reset']}")
+            print()
+
+        hdr(f"MÁR EGYEZIK — nincs döntés  ({len(agreed)} db)")
+        for act, per, combos in sorted(agreed):
+            print(f"  {C['green']}{next(iter(combos)):<24}{C['reset']} {act}")
+
+        print()
+        print("═" * 70)
+        print(f"  {C['dim']}A besorolás minta-alapú, ezért néhány találat téves lehet.{C['reset']}")
+        print(f"  {C['dim']}Ellenőrzés: prefs-compare --actions{C['reset']}")
+        print("═" * 70)
+        return 0
+
+    if mode in ("summary", "actions"):
+        hdr("AKCIÓ-TÉRKÉP — a 2. szint alapja")
+        print(f"  {C['dim']}Absztrakt akció → melyik rice hogyan valósítja meg.{C['reset']}")
+        print(f"  {C['dim']}Ahol mindenhol van megvalósítás, ott egyesíthető a gomb.{C['reset']}\n")
+        actions: dict[str, dict[str, tuple[str, str]]] = {}
+        for prof, binds in data.items():
+            for b in binds:
+                act = classify(b["payload"])
+                if act:
+                    actions.setdefault(act, {}).setdefault(prof, (b["combo"], b["payload"]))
+        for act in sorted(actions, key=lambda a: (-len(actions[a]), a)):
+            per = actions[act]
+            mark = f"{C['green']}✓{C['reset']}" if len(per) == len(profs) else f"{C['yellow']}~{C['reset']}"
+            print(f"  {mark} {C['bold']}{act}{C['reset']}")
+            for p in profs:
+                if p in per:
+                    combo, payload = per[p]
+                    print(f"      {p:<16} {C['cyan']}{combo:<22}{C['reset']} {C['dim']}{payload[:40]}{C['reset']}")
+                else:
+                    print(f"      {p:<16} {C['dim']}— nincs{C['reset']}")
+            print()
+
+    print("═" * 70)
+    print(f"  {C['dim']}prefs-compare --conflicts   csak a döntendő lista{C['reset']}")
+    print(f"  {C['dim']}prefs-compare --actions     akció-térkép{C['reset']}")
+    print(f"  {C['dim']}prefs-compare --profile <p> egy profil összes bindja{C['reset']}")
+    print("═" * 70)
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

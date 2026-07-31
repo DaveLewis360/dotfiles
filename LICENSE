@@ -1,0 +1,48 @@
+MIT License
+
+Copyright (c) 2026 DaveLewis360
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+--------------------------------------------------------------------------------
+
+Scope and third-party content
+
+The licence above covers this repository's own content: the scripts under
+scripts/ (dotswitch, dotdoctor, fork-check, shell-rebuild, shell-restart and
+the overlay tooling), the profile configuration under profiles/, shared/ and
+apps/, the systemd units, and home/.
+
+It does not cover, and cannot relicense, the following:
+
+  * The embedded upstream clones listed in profiles/UPSTREAM.md. They are
+    excluded from this repository by .gitignore precisely because they carry
+    their own history and their own terms; the manifest records where each one
+    came from and at which commit. They remain under their upstream licences.
+
+  * The Quickshell fork at DaveLewis360/shell, which is a separate repository
+    and stays under GPL-3.0, inherited from caelestia-dots/shell.
+
+  * Any configuration here that is adapted from an upstream project rather than
+    written for this repository. Where that is the case, that project's terms
+    apply to the adapted parts. Note that caelestia-dots/hyprland and
+    caelestia-dots/caelestia declare no licence at all, so no redistribution
+    permission can be assumed for material taken from them — treat anything
+    derived from those as unlicensed upstream content rather than as covered by
+    the MIT grant above.

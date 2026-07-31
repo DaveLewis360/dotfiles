@@ -16,5 +16,15 @@
     "shell_json": true,
     "cli_json": true,
     "ohmyposh": false
+  },
+  "action_impl": {
+    "launcher": {
+      "dispatcher": "global",
+      "args": "caelestia:launcher"
+    },
+    "screenshot": {
+      "dispatcher": "exec",
+      "args": "caelestia screenshot"
+    }
   }
 }

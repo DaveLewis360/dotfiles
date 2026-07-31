@@ -333,7 +333,8 @@ apply_overlay() {
     # abban, ahol épp be volt írva.
     overlay_err=$(python3 "$HOME/dotfiles/scripts/apply_overlay.py" \
         "$SHARED_DIR/common.json" "$target" "$target_fmt" \
-        --cli-target "$CAELESTIA_CONFIG_DIR/cli.json" 2>&1 >/dev/null)
+        --cli-target "$CAELESTIA_CONFIG_DIR/cli.json" \
+        --action-impl "$DOTFILES_DIR/$profile/.meta.json" 2>&1 >/dev/null)
     local overlay_rc=$?
 
     if [[ $overlay_rc -eq 0 ]]; then

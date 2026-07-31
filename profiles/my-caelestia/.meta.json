@@ -16,5 +16,15 @@
     "ohmyposh": true
   },
   "overlay_target": ".config/hypr/hardware/overlay.conf",
-  "overlay_format": "conf-hl"
+  "overlay_format": "conf-hl",
+  "action_impl": {
+    "launcher": {
+      "dispatcher": "global",
+      "args": "caelestia:launcher"
+    },
+    "screenshot": {
+      "dispatcher": "exec",
+      "args": "caelestia screenshot"
+    }
+  }
 }

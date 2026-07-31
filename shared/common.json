@@ -148,5 +148,19 @@
         ]
       }
     }
-  }
+  },
+  "actions": [
+    {
+      "_comment": "2. SZINT: olyan akciók, amiket minden rice MÁSHOGY valósít meg (shell-specifikus IPC), ezért nem lehet egy parancsot beírni. Itt csak a GOMB és az akció neve van; a megvalósítást a profil .meta.json-jának action_impl blokkja adja. Ha egy profil nem ismeri az akciót, az overlay kihagyja és figyelmeztet — nem generál működésképtelen bindot.",
+      "description": "App launcher",
+      "keys": "SUPER, SUPER_L",
+      "action": "launcher",
+      "flags": "r"
+    },
+    {
+      "description": "Régió-képernyőkép",
+      "keys": "PRINT",
+      "action": "screenshot"
+    }
+  ]
 }

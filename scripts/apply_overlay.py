@@ -17,6 +17,10 @@ Kezelt szekciók a common.json-ban:
   windowrules  — közös ablakszabályok, minden profilban ugyanazok
   cliToggles   — a 'caelestia toggle <név>' app-definíciói; NEM hypr config,
                  ezért a ~/.config/caelestia/cli.json-ba olvad be (--cli-target)
+  actions      — absztrakt akciók (2. szint): itt csak a GOMB van, a
+                 megvalósítást a profil .meta.json action_impl blokkja adja
+                 (--action-impl). Így a launcher ugyanazon a gombon van minden
+                 rice-ban, pedig mindegyik más IPC-vel nyitja.
 
 Minden bind elé UNBIND kerül. Hyprlandban két bind ugyanazon a gombon
 ÖSSZEADÓDIK, nem felülírja egymást — két toggle így kioltaná önmagát. Az unbind
@@ -126,9 +130,16 @@ def _lua_exec(args: str) -> str:
     return f'hl.dsp.exec_cmd("{escaped}")'
 
 
+def _lua_global(args: str) -> str:
+    # A shell-ek IPC-je: hl.dsp.global("caelestia:launcher") /
+    # hl.dsp.global("quickshell:searchToggleRelease")
+    return f'hl.dsp.global("{args.strip()}")'
+
+
 LUA_DISPATCHERS = {
     "fullscreenstate": _lua_fullscreenstate,
     "exec": _lua_exec,
+    "global": _lua_global,
     "killactive": lambda a: "hl.dsp.window.close()",
     "togglefloating": lambda a: "hl.dsp.window.toggle_floating()",
     "pin": lambda a: "hl.dsp.window.pin()",
@@ -280,7 +291,43 @@ def merge_cli_toggles(data: dict, cli_path: str) -> str | None:
     return f"cliToggles → {cli_path} ({', '.join(sorted(toggles))})"
 
 
-def build_body(data: dict, fmt: str) -> str:
+def build_actions(actions: list, impl: dict, fmt: str) -> tuple[list[str], list[str]]:
+    """Absztrakt akciók → konkrét bindok a profil megvalósításai alapján.
+
+    Ha egy akcióhoz nincs megvalósítás ebben a profilban, KIHAGYJUK és
+    figyelmeztetünk. Egy hiányzó dispatcherrel generált bind csendben nem
+    működne — pontosan az a hibaosztály, amit ez a réteg meg akar szüntetni.
+    """
+    lines: list[str] = []
+    warnings: list[str] = []
+
+    for a in actions:
+        if not isinstance(a, dict) or a.get("enabled") is False:
+            continue
+        name = a.get("action", "").strip()
+        keys = a.get("keys", "").strip()
+        if not name or not keys:
+            continue
+
+        spec = impl.get(name)
+        if not isinstance(spec, dict) or not spec.get("dispatcher"):
+            warnings.append(f"'{name}' akcióhoz nincs action_impl ebben a profilban "
+                            f"— a {keys} bind kimarad")
+            continue
+
+        bind = {
+            "description": a.get("description", ""),
+            "keys": keys,
+            "flags": a.get("flags", ""),
+            "dispatcher": spec["dispatcher"],
+            "args": str(spec.get("args", "")),
+        }
+        lines.extend(build_binds([bind], fmt))
+
+    return lines, warnings
+
+
+def build_body(data: dict, fmt: str, action_impl: dict | None = None) -> str:
     sections: list[list[str]] = []
 
     inp = build_input(data.get("input", {}), fmt)
@@ -290,6 +337,13 @@ def build_body(data: dict, fmt: str) -> str:
     binds = build_binds(data.get("binds", []), fmt)
     if binds:
         sections.append(binds)
+
+    if action_impl is not None:
+        acts, warns = build_actions(data.get("actions", []), action_impl, fmt)
+        if acts:
+            sections.append(acts)
+        for w in warns:
+            print(f"apply_overlay: {w}", file=sys.stderr)
 
     rules = build_windowrules(data.get("windowrules", []), fmt)
     if rules:
@@ -301,6 +355,21 @@ def build_body(data: dict, fmt: str) -> str:
 def main() -> int:
     args = sys.argv[1:]
     cli_target = None
+    action_impl: dict | None = None
+    if "--action-impl" in args:
+        i = args.index("--action-impl")
+        try:
+            meta_path = args[i + 1]
+        except IndexError:
+            print("apply_overlay: --action-impl érték nélkül", file=sys.stderr)
+            return 2
+        del args[i:i + 2]
+        try:
+            action_impl = json.loads(pathlib.Path(meta_path).read_text()).get("action_impl", {})
+        except Exception as e:
+            print(f"apply_overlay: {meta_path} nem olvasható ({e})", file=sys.stderr)
+            action_impl = {}
+
     if "--cli-target" in args:
         i = args.index("--cli-target")
         try:
@@ -312,7 +381,8 @@ def main() -> int:
 
     if len(args) != 3:
         print("usage: apply_overlay.py <common.json|--strip> <target> <lua|conf|conf-hl>\n"
-              "                        [--cli-target <cli.json>]", file=sys.stderr)
+              "                        [--cli-target <cli.json>]\n"
+              "                        [--action-impl <profil/.meta.json>]", file=sys.stderr)
         return 2
     first, target, fmt = args[0], args[1], args[2]
 
@@ -326,7 +396,7 @@ def main() -> int:
     else:
         with open(first) as f:
             data = json.load(f)
-        body = build_body(data, fmt)
+        body = build_body(data, fmt, action_impl)
 
     comment = "--" if fmt == "lua" else "#"
     begin = f"{comment} >>> dotswitch managed (common settings) >>>"

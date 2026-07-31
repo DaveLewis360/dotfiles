@@ -405,13 +405,16 @@ fi
 section "Quickshell ↔ Hyprland Lua IPC"
 hypr_lua=0
 [[ -f "$HOME/.config/hypr/hyprland.lua" ]] && hypr_lua=1
-qs_types=$(ls /usr/lib/qt6/qml/Quickshell/Hyprland/*.qmltypes 2>/dev/null | head -1)
+qs_mod=/usr/lib/qt6/qml/Quickshell/Hyprland
 
 if [[ $hypr_lua -eq 0 ]]; then
     pass "a Hyprland nem Lua configot használ — nem érintett"
-elif [[ -z $qs_types ]]; then
-    warn "a Quickshell Hyprland modul qmltypes-a nem található"
-elif grep -q 'usingLua' "$qs_types"; then
+elif [[ ! -d $qs_mod ]]; then
+    warn "a Quickshell Hyprland modul nem található ($qs_mod)"
+# Rekurzívan keresünk: a Quickshell 0.3.0 alkönyvtárakba szedte a modult, az IPC
+# típusok az _Ipc/ alá kerültek, a felső szintű qmltypes csak egy csonk. Egy nem
+# rekurzív glob itt hamis pozitívot adott.
+elif grep -rq 'usingLua' "$qs_mod" 2>/dev/null; then
     pass "a Quickshell ismeri a usingLua-t (Lua dispatch működik)"
 else
     fail "Lua config, de a Quickshell nem ismeri a usingLua-t"

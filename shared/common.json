@@ -1,6 +1,5 @@
 {
   "_comment": "KÖZÖS, rice-független beállítások. A dotswitch minden profilra ráteszi váltáskor, a profil natív formátumában (lua/conf). Itt egy helyen szerkeszd — minden rice-ban ugyanaz lesz.",
-
   "input": {
     "_comment": "Skalárok + egy szint mély alblokkok (pl. touchpad). Az üres string értékű kulcsokat az overlay kihagyja.",
     "kb_layout": "hu",
@@ -12,7 +11,6 @@
       "natural_scroll": true
     }
   },
-
   "binds": [
     {
       "_comment": "Az overlay minden bind elé UNBIND-ot ír, mert Hyprlandban két bind ugyanazon a gombon ÖSSZEADÓDIK (két toggle kioltaná egymást). Így a közös réteg felülírja a rice sajátját, nem hozzáadódik. Csak olyan parancs kerüljön ide, ami MINDEN rice-ban működik — a shell-specifikus akciók (launcher, sidebar) nem ilyenek.",
@@ -59,54 +57,95 @@
       "args": "caelestia toggle sysmon"
     }
   ],
-
   "windowrules": [
     {
-      "_comment": "A match strukturált, mert formátumonként más a szintaxis: igazi Hyprland conf-ban 'class:^(x)$', a translator bemenetében 'match:class ^(x)$'.",
+      "_comment": "A .* azért kell, mert a btop külön app-ID-t kap (com.mitchellh.ghostty.btop) — a $ lezárás miatt a sima ghostty-szabály nem illeszkedett rá.",
       "rule": "opacity 1 1 override",
-      "match": {"class": "^(com.mitchellh.ghostty)$"}
+      "match": {
+        "class": "^(com\\.mitchellh\\.ghostty.*)$"
+      }
     },
     {
-      "rule": "no_blur true",
-      "match": {"class": "^(com.mitchellh.ghostty)$"}
+      "_comment": "no_blur FALSE = a blur BE van kapcsolva. A ghostty background-opacity 0.4, a blur adja hozzá az üveg-hatást. Korábban itt 'true' volt, ami kilapította a megjelenést.",
+      "rule": "no_blur false",
+      "match": {
+        "class": "^(com\\.mitchellh\\.ghostty.*)$"
+      }
     },
     {
       "_comment": "Ezek nélkül a SUPER+D/M/T egy ÜRES special workspace-t nyitna abban a rice-ban, ami nem ismeri ezeket a szabályokat.",
       "rule": "workspace special:communication",
-      "match": {"class": "^(discord|vesktop|equibop|WebCord)$"}
+      "match": {
+        "class": "^(discord|vesktop|equibop|WebCord)$"
+      }
     },
     {
       "rule": "workspace special:music",
-      "match": {"class": "^(spotifyWrapper|spotify|Spotify)$"}
+      "match": {
+        "class": "^(spotifyWrapper|spotify|Spotify)$"
+      }
     },
     {
       "rule": "workspace special:sysmon",
-      "match": {"class": "^(btop)$"}
+      "match": {
+        "class": "^(com\\.mitchellh\\.ghostty\\.btop)$"
+      }
     }
   ],
-
   "cliToggles": {
     "_comment": "A 'caelestia toggle <név>' definíciói: melyik app tartozik melyik special workspace-hez. Az overlay beolvasztja a ~/.config/caelestia/cli.json-ba, hogy MINDEN profilban meglegyen — eddig csak a my-caelestia-ban volt, a git-ben egyáltalán nem.",
     "communication": {
       "discord": {
-        "command": ["discord"],
-        "match": [{"class": "discord"}]
+        "_comment": "A wrapper vesktopot (Vencord beépítve) használ, ha van; különben az official Discordot. A match mindkét osztályt fedi, hogy a váltás után se induljon második példány.",
+        "command": [
+          "discord-vencord"
+        ],
+        "match": [
+          {
+            "class": "vesktop"
+          },
+          {
+            "class": "equibop"
+          },
+          {
+            "class": "discord"
+          }
+        ]
       }
     },
     "music": {
       "spotify": {
         "command": [
-          "zen-browser", "-P", "spotifyWrapper",
-          "--class=spotifyWrapper", "--name=spotifyWrapper",
+          "zen-browser",
+          "-P",
+          "spotifyWrapper",
+          "--class=spotifyWrapper",
+          "--name=spotifyWrapper",
           "https://open.spotify.com"
         ],
-        "match": [{"class": "spotifyWrapper"}]
+        "match": [
+          {
+            "class": "spotifyWrapper"
+          }
+        ]
       }
     },
     "sysmon": {
       "btop": {
-        "command": ["app2unit", "--", "ghostty", "--class=btop", "-e", "btop"],
-        "match": [{"class": "btop"}]
+        "_comment": "A ghostty érvényes GTK app-ID-t vár; a puszta 'btop'-ot csendben eldobja. Ezért kell a reverse-DNS forma.",
+        "command": [
+          "app2unit",
+          "--",
+          "ghostty",
+          "--class=com.mitchellh.ghostty.btop",
+          "-e",
+          "btop"
+        ],
+        "match": [
+          {
+            "class": "com.mitchellh.ghostty.btop"
+          }
+        ]
       }
     }
   }

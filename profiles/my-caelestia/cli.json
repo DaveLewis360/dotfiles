@@ -8,10 +8,17 @@
     "toggles": {
         "communication": {
             "discord": {
+                "_comment": "A wrapper vesktopot (Vencord beépítve) használ, ha van; különben az official Discordot. A match mindkét osztályt fedi, hogy a váltás után se induljon második példány.",
                 "command": [
-                    "discord"
+                    "discord-vencord"
                 ],
                 "match": [
+                    {
+                        "class": "vesktop"
+                    },
+                    {
+                        "class": "equibop"
+                    },
                     {
                         "class": "discord"
                     }
@@ -37,17 +44,18 @@
         },
         "sysmon": {
             "btop": {
+                "_comment": "A ghostty érvényes GTK app-ID-t vár; a puszta 'btop'-ot csendben eldobja. Ezért kell a reverse-DNS forma.",
                 "command": [
                     "app2unit",
                     "--",
                     "ghostty",
-                    "--class=btop",
+                    "--class=com.mitchellh.ghostty.btop",
                     "-e",
                     "btop"
                 ],
                 "match": [
                     {
-                        "class": "btop"
+                        "class": "com.mitchellh.ghostty.btop"
                     }
                 ]
             }

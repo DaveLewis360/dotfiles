@@ -1,0 +1,69 @@
+#!/usr/bin/env bash
+# =============================================================================
+# discord-vencord — Discord Vencorddal, bármelyik telepített kliensen
+# =============================================================================
+# Miért wrapper és nem közvetlenül "vesktop" a configban:
+# ha a config fixen vesktopot hívna, és az nincs telepítve, a SUPER+D csendben
+# semmit nem tenne — pontosan az a hiba, ami eddig is volt (a config vesktopot
+# hívott, ami nincs a gépen). Ez a wrapper mindig elindít valamit, és jelzi, ha
+# nem a kívánt klienst kapod.
+#
+# Sorrend:
+#   1. vesktop        — Vencord beépítve, nincs Discord-patchelés, frissítés-biztos
+#   2. equibop        — vesktop fork, ugyanaz az elv
+#   3. discord        — az official kliens; Vencord csak akkor van benne, ha
+#                       injektálva lett (~/.config/Vencord + patchelt resources)
+#
+# Ha a vesktop hiányzik, a script értesítést küld, mert az official Discord
+# Vencord-injekciója minden Discord-frissítéskor elveszik.
+# =============================================================================
+
+set -uo pipefail
+
+WAYLAND_FLAGS=(
+    --enable-transparent-visuals
+    --enable-wayland-ime
+    --ozone-platform-hint=auto
+    --enable-features=WaylandWindowDecorations
+)
+
+notify() {
+    command -v notify-send >/dev/null 2>&1 &&
+        notify-send -u low -a "Discord" "$1" "$2" 2>/dev/null || true
+}
+
+# ── 1. vesktop (a kívánt út) ────────────────────────────────────────────────
+if command -v vesktop >/dev/null 2>&1; then
+    exec vesktop "${WAYLAND_FLAGS[@]}" "$@"
+fi
+
+if command -v equibop >/dev/null 2>&1; then
+    exec equibop "${WAYLAND_FLAGS[@]}" "$@"
+fi
+
+# ── 2. official Discord ─────────────────────────────────────────────────────
+if command -v discord >/dev/null 2>&1; then
+    # Van-e nyoma a Vencord-injekciónak? A telepítő egy 'app' könyvtárat hoz
+    # létre a Discord resources-ában, ami betölti a ~/.config/Vencord/dist-et.
+    injected=0
+    for res in /usr/share/discord/resources /opt/discord/resources \
+               /usr/lib/discord/resources; do
+        [[ -d "$res/app" ]] && injected=1 && break
+    done
+
+    if [[ $injected -eq 0 ]]; then
+        notify "Vencord nem aktív" \
+               "A vesktop nincs telepítve, az official Discord pedig nincs patchelve. Telepítés: yay -S vesktop-bin"
+    fi
+
+    # A ~/.local/bin/discord wrapper már hozzáadja a Wayland flageket, ezért
+    # itt csak akkor adjuk őket, ha közvetlenül a rendszerbinárist hívjuk.
+    if [[ "$(command -v discord)" == "$HOME/.local/bin/discord" ]]; then
+        exec discord "$@"
+    fi
+    exec discord "${WAYLAND_FLAGS[@]}" "$@"
+fi
+
+notify "Nincs Discord-kliens" "Sem vesktop, sem discord nincs telepítve."
+echo "discord-vencord: nincs telepített Discord-kliens" >&2
+exit 1

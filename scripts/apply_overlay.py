@@ -14,7 +14,13 @@ kerül (egyetlen igazságforrás), és a .lua-t abból generálja a translator.
 Kezelt szekciók a common.json-ban:
   input        — beállítás-blokk (skalárok + egy szint mély alblokkok, pl. touchpad)
   binds        — közös keybindek, minden profilban ugyanazok
-  windowrules  — közös ablakszabályok (megjelenés), minden profilban ugyanazok
+  windowrules  — közös ablakszabályok, minden profilban ugyanazok
+  cliToggles   — a 'caelestia toggle <név>' app-definíciói; NEM hypr config,
+                 ezért a ~/.config/caelestia/cli.json-ba olvad be (--cli-target)
+
+Minden bind elé UNBIND kerül. Hyprlandban két bind ugyanazon a gombon
+ÖSSZEADÓDIK, nem felülírja egymást — két toggle így kioltaná önmagát. Az unbind
+nélkül a közös réteg nem felülírná a rice sajátját, hanem duplikálná.
 
 Idempotens: minden futáskor eltávolítja a korábbi managed blokkot, majd újat ír.
 A managed blokkon kívüli (felhasználói) tartalmat érintetlenül hagyja.
@@ -30,6 +36,7 @@ a my-caelestia profil is BETÖLTI. Ha egy korábbi profil managed blokkja
 bennemarad, a bindok megduplázódnak — két egymást kioltó toggle.
 """
 import json
+import pathlib
 import sys
 
 # Ezek nem beállítások, hanem dokumentáció a common.json-ban.
@@ -165,6 +172,7 @@ def build_binds(binds: list, fmt: str) -> list[str]:
 
         if fmt in ("conf", "conf-hl"):
             tail = f", {args}" if args else ""
+            lines.append(f"unbind = {keys}")
             lines.append(f"bind{flags} = {keys}, {disp}{tail}")
             continue
 
@@ -182,6 +190,7 @@ def build_binds(binds: list, fmt: str) -> list[str]:
         combo = " + ".join(p.strip() for p in keys.split(",") if p.strip())
         opts = [LUA_BIND_OPTS[c] for c in flags if c in LUA_BIND_OPTS]
         opt_str = (", { " + ", ".join(opts) + " }") if opts else ""
+        lines.append(f'hl.unbind("{combo}")')
         lines.append(f'hl.bind("{combo}", {maker(args)}{opt_str})')
 
     return lines
@@ -238,6 +247,39 @@ def build_windowrules(rules: list, fmt: str) -> list[str]:
 
 # ─────────────────────────────────────────────────────────────────────────────
 
+def merge_cli_toggles(data: dict, cli_path: str) -> str | None:
+    """A cliToggles beolvasztása a caelestia CLI cli.json-jába.
+
+    Ez nem hypr config, hanem a `caelestia toggle <név>` app-definíciói. Azért
+    kell külön kezelni, mert JSON, és mert a felhasználó egyéb kulcsait
+    (wallpaper, theme, record) NEM szabad elveszíteni.
+    """
+    toggles = {k: v for k, v in data.get("cliToggles", {}).items()
+               if k not in IGNORED_KEYS}
+    if not toggles:
+        return None
+
+    path = pathlib.Path(cli_path)
+    try:
+        current = json.loads(path.read_text())
+        if not isinstance(current, dict):
+            return f"{cli_path} nem JSON objektum — kihagyva"
+    except FileNotFoundError:
+        current = {}
+    except json.JSONDecodeError as e:
+        return f"{cli_path} hibás JSON ({e}) — kihagyva"
+
+    before = json.dumps(current.get("toggles"), sort_keys=True)
+    current["toggles"] = toggles
+    if json.dumps(current["toggles"], sort_keys=True) == before:
+        return None
+
+    path.parent.mkdir(parents=True, exist_ok=True)
+    # A symlinket követjük: a profil saját cli.json-ját írjuk, nem cseréljük le.
+    path.write_text(json.dumps(current, indent=4, ensure_ascii=False) + "\n")
+    return f"cliToggles → {cli_path} ({', '.join(sorted(toggles))})"
+
+
 def build_body(data: dict, fmt: str) -> str:
     sections: list[list[str]] = []
 
@@ -257,11 +299,22 @@ def build_body(data: dict, fmt: str) -> str:
 
 
 def main() -> int:
-    if len(sys.argv) != 4:
-        print("usage: apply_overlay.py <common.json|--strip> <target> <lua|conf|conf-hl>",
-              file=sys.stderr)
+    args = sys.argv[1:]
+    cli_target = None
+    if "--cli-target" in args:
+        i = args.index("--cli-target")
+        try:
+            cli_target = args[i + 1]
+        except IndexError:
+            print("apply_overlay: --cli-target érték nélkül", file=sys.stderr)
+            return 2
+        del args[i:i + 2]
+
+    if len(args) != 3:
+        print("usage: apply_overlay.py <common.json|--strip> <target> <lua|conf|conf-hl>\n"
+              "                        [--cli-target <cli.json>]", file=sys.stderr)
         return 2
-    first, target, fmt = sys.argv[1], sys.argv[2], sys.argv[3]
+    first, target, fmt = args[0], args[1], args[2]
 
     if fmt not in ("lua", "conf", "conf-hl"):
         print(f"apply_overlay: ismeretlen formátum: {fmt}", file=sys.stderr)
@@ -309,6 +362,12 @@ def main() -> int:
 
     with open(target, "w") as f:
         f.write("\n".join(out) + ("\n" if out else ""))
+
+    if not strip_only and cli_target:
+        note = merge_cli_toggles(data, cli_target)
+        if note:
+            print(f"apply_overlay: {note}", file=sys.stderr)
+
     return 0
 
 

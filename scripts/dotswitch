@@ -292,8 +292,13 @@ apply_overlay() {
     # dispatchere nincs leképezve a profil formátumára. Csendben rossz configot
     # generálni sokkal rosszabb, mint egy látható figyelmeztetés.
     local overlay_err
+    # A cliToggles nem hypr config, hanem a `caelestia toggle <név>` app-
+    # definíciói — azok a caelestia CLI cli.json-jába olvadnak be. Így a
+    # SUPER+M / SUPER+D minden profilban ugyanazt az appot nyitja, nem csak
+    # abban, ahol épp be volt írva.
     overlay_err=$(python3 "$HOME/dotfiles/scripts/apply_overlay.py" \
-        "$SHARED_DIR/common.json" "$target" "$target_fmt" 2>&1 >/dev/null)
+        "$SHARED_DIR/common.json" "$target" "$target_fmt" \
+        --cli-target "$CAELESTIA_CONFIG_DIR/cli.json" 2>&1 >/dev/null)
     local overlay_rc=$?
 
     if [[ $overlay_rc -eq 0 ]]; then

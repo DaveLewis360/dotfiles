@@ -1,51 +1,64 @@
 {
-  "wallpaper": {
-    "postHook": "python3 /home/dave/dotfiles/scripts/update_css_vars.py"
-  },
-  "theme": {
-    "enableTerm": false
-  },
-  "toggles": {
-    "communication": {
-      "discord": {
-        "command": [
-          "vesktop",
-          "--enable-transparent-visuals",
-          "--enable-wayland-ime",
-          "--ozone-platform-hint=auto",
-          "--enable-features=WaylandWindowDecorations"
-        ],
-        "match": [
-          {
-            "class": "vesktop"
-          }
-        ]
-      }
+    "wallpaper": {
+        "postHook": "python3 /home/dave/dotfiles/scripts/update_css_vars.py"
     },
-    "music": {
-      "spotify": {
-        "command": [
-          "zen-browser",
-          "-P",
-          "spotifyWrapper",
-          "--class=spotifyWrapper",
-          "--name=spotifyWrapper",
-          "https://open.spotify.com"
-        ],
-        "match": [
-          {
-            "class": "spotifyWrapper"
-          }
+    "theme": {
+        "enableTerm": false
+    },
+    "toggles": {
+        "communication": {
+            "discord": {
+                "command": [
+                    "discord"
+                ],
+                "match": [
+                    {
+                        "class": "discord"
+                    }
+                ]
+            }
+        },
+        "music": {
+            "spotify": {
+                "command": [
+                    "zen-browser",
+                    "-P",
+                    "spotifyWrapper",
+                    "--class=spotifyWrapper",
+                    "--name=spotifyWrapper",
+                    "https://open.spotify.com"
+                ],
+                "match": [
+                    {
+                        "class": "spotifyWrapper"
+                    }
+                ]
+            }
+        },
+        "sysmon": {
+            "btop": {
+                "command": [
+                    "app2unit",
+                    "--",
+                    "ghostty",
+                    "--class=btop",
+                    "-e",
+                    "btop"
+                ],
+                "match": [
+                    {
+                        "class": "btop"
+                    }
+                ]
+            }
+        }
+    },
+    "record": {
+        "extraArgs": [
+            "-k",
+            "hevc",
+            "-a",
+            "default_output|default_input"
         ]
-      }
     }
-  },
-  "record": {
-    "extraArgs": [
-      "-k",
-      "hevc",
-      "-a",
-      "default_output|default_input"
-    ]
-  }
 }

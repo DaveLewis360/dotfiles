@@ -3,6 +3,13 @@ import sys
 import glob
 import re
 
+MAKE_COMBO_FN = """local function make_combo(str)
+    local res = str:gsub(",%s*", " + "):gsub("^%s*%+%s*", ""):gsub("%s*%+%s*$", "")
+    res = res:gsub("Super", "SUPER"):gsub("Ctrl", "CTRL"):gsub("Alt", "ALT"):gsub("Shift", "SHIFT")
+    return res
+end"""
+
+
 def parse_hyprland_conf(lines, known_vars):
     root_config = {}
     lua_lines = []
@@ -112,13 +119,20 @@ def parse_hyprland_conf(lines, known_vars):
                     val = vals[1] if len(vals) > 1 else ""
                     lua_lines.append(f'hl.env("{key}", "{val}")')
                     continue
+                elif k == "unbind":
+                    # FONTOS: "unbind".startswith("bind") HAMIS, ezért enélkül az
+                    # unbind az általános beállítás-kezelőbe esne, és
+                    # 'unbind = "SUPER, T",' lenne belőle egy configblokk
+                    # közepén — ami hibás config.
+                    if not has_make_combo:
+                        lua_lines.insert(0, MAKE_COMBO_FN)
+                        has_make_combo = True
+                    keys_eval = f'"{v.strip()}"'
+                    lua_lines.append(f'hl.unbind(make_combo({keys_eval}))')
+                    continue
                 elif k.startswith("bind"):
                     if not has_make_combo:
-                        lua_lines.insert(0, '''local function make_combo(str)
-    local res = str:gsub(",%s*", " + "):gsub("^%s*%+%s*", ""):gsub("%s*%+%s*$", "")
-    res = res:gsub("Super", "SUPER"):gsub("Ctrl", "CTRL"):gsub("Alt", "ALT"):gsub("Shift", "SHIFT")
-    return res
-end''')
+                        lua_lines.insert(0, MAKE_COMBO_FN)
                         has_make_combo = True
                     
                     parts = [p.strip() for p in v.split(',')]

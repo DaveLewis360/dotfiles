@@ -1,0 +1,231 @@
+#!/usr/bin/env bash
+# =============================================================================
+# fix-oom-freeze — a gép ne fagyjon le, ha elfogy a RAM
+# =============================================================================
+# A tünet
+#   A RAM megtelik, a gép teljesen lefagy, csak hard reset segít.
+#
+# Miért történik
+#   A kernel OOM killere csak akkor lép, amikor egy memória-allokáció MÁR
+#   elhasal. Addig a rendszer a swapot püföli (thrashing), és mivel minden
+#   művelet lapozásra vár, a felület nem válaszol. Vagyis a védelem elvileg
+#   megvan, csak túl későn aktiválódik ahhoz, hogy használható maradjon a gép.
+#
+#   Ezen a gépen ráadásul:
+#     - a zram mindössze 4 GB (31 GB RAM mellett), tehát hamar elfogy
+#     - a swappiness 60, ami a gyors zramhoz alacsony
+#     - a systemd-oomd telepítve van, de KI VAN KAPCSOLVA
+#
+# Amit ez a script beállít
+#   1. systemd-oomd — PSI-alapú memória-nyomás figyelés. Akkor öl, amikor a
+#      nyomás tartósan magas, de a gép még válaszol. Ez az igazi javítás.
+#   2. Swap-alapú ölés — ha a swap 90% fölé megy, öl. A te swapod korábban
+#      100%-on volt, tehát ez közvetlenül a te esetedre szól.
+#   3. Nagyobb zram — 4 GB helyett a RAM negyede (~8 GB). zstd-vel ez kb.
+#      2,5-3 GB valódi RAM-ba fér, mert tömörítve tárol.
+#   4. swappiness 150 + page-cluster 0 — a zram gyors, érdemes hamarabb és
+#      laponként használni, nem nagy blokkokban.
+#
+# Minden változtatás külön .conf fájlban van, tehát a --revert nyom nélkül
+# eltávolítja. A meglévő fájlokat nem írja át, csak drop-in könyvtárakat használ.
+#
+# Használat
+#   sudo ~/dotfiles/scripts/fix-oom-freeze            beállítás
+#   sudo ~/dotfiles/scripts/fix-oom-freeze --revert   visszavonás
+#        ~/dotfiles/scripts/fix-oom-freeze --status   állapot (nem kell sudo)
+# =============================================================================
+
+set -uo pipefail
+
+MODE="apply"
+case "${1:-}" in
+    --revert) MODE="revert" ;;
+    --status) MODE="status" ;;
+    -h|--help) sed -n '3,42p' "$0" | sed 's/^# \?//'; exit 0 ;;
+    "") ;;
+    *) echo "Ismeretlen opció: $1" >&2; exit 2 ;;
+esac
+
+if [[ -t 1 ]]; then
+    B=$'\033[1m'; D=$'\033[2m'; R=$'\033[0m'
+    GRN=$'\033[32m'; YLW=$'\033[33m'; RED=$'\033[31m'; CYN=$'\033[36m'
+else
+    B=""; D=""; R=""; GRN=""; YLW=""; RED=""; CYN=""
+fi
+ok()   { echo "  ${GRN}✓${R} $*"; }
+warn() { echo "  ${YLW}!${R} $*"; }
+info() { echo "  ${D}$*${R}"; }
+
+OOMD_DROPIN=/etc/systemd/oomd.conf.d/99-dotfiles.conf
+ROOT_SLICE_DROPIN=/etc/systemd/system/-.slice.d/99-oomd.conf
+USER_SVC_DROPIN=/etc/systemd/system/user@.service.d/99-oomd.conf
+SYSCTL_FILE=/etc/sysctl.d/99-zram-tuning.conf
+ZRAM_CONF=/etc/systemd/zram-generator.conf
+ZRAM_BACKUP=/etc/systemd/zram-generator.conf.pre-oom-fix
+
+# ── állapot ─────────────────────────────────────────────────────────────────
+show_status() {
+    echo
+    echo "${B}Jelenlegi állapot${R}"
+    echo
+    free -h | sed 's/^/  /'
+    echo
+    echo "  zram:"
+    zramctl 2>/dev/null | sed 's/^/    /' || echo "    (nincs)"
+    echo
+    printf "  %-34s %s\n" "systemd-oomd" "$(systemctl is-active systemd-oomd 2>/dev/null)"
+    printf "  %-34s %s\n" "vm.swappiness" "$(cat /proc/sys/vm/swappiness 2>/dev/null)"
+    printf "  %-34s %s\n" "vm.page-cluster" "$(cat /proc/sys/vm/page-cluster 2>/dev/null)"
+    echo
+    echo "  ManagedOOM a user session-ön:"
+    systemctl show -p ManagedOOMSwap,ManagedOOMMemoryPressure,ManagedOOMMemoryPressureLimit \
+        "user@$(id -u).service" 2>/dev/null | sed 's/^/    /'
+    echo
+    echo "  Ez a script telepítette:"
+    for f in "$OOMD_DROPIN" "$ROOT_SLICE_DROPIN" "$USER_SVC_DROPIN" "$SYSCTL_FILE"; do
+        [[ -f "$f" ]] && echo "    ${GRN}✓${R} $f" || echo "    ${D}— $f${R}"
+    done
+    echo
+    echo "  Legnagyobb memóriafogyasztók:"
+    ps -eo rss,comm --no-headers 2>/dev/null \
+        | awk '{a[$2]+=$1} END {for (k in a) printf "    %7.0f MB  %s\n", a[k]/1024, k}' \
+        | sort -rn | head -6
+    echo
+}
+
+if [[ "$MODE" == "status" ]]; then
+    show_status
+    exit 0
+fi
+
+if [[ $EUID -ne 0 ]]; then
+    echo "Ez a művelet root jogot igényel:" >&2
+    echo "  sudo $0 ${1:-}" >&2
+    exit 1
+fi
+
+# ── visszavonás ─────────────────────────────────────────────────────────────
+if [[ "$MODE" == "revert" ]]; then
+    echo
+    echo "${B}Visszavonás${R}"
+    echo
+    for f in "$OOMD_DROPIN" "$ROOT_SLICE_DROPIN" "$USER_SVC_DROPIN" "$SYSCTL_FILE"; do
+        [[ -f "$f" ]] && { rm -f "$f"; ok "törölve: $f"; }
+    done
+    rmdir --ignore-fail-on-non-empty \
+        /etc/systemd/oomd.conf.d /etc/systemd/system/-.slice.d \
+        /etc/systemd/system/user@.service.d 2>/dev/null
+
+    if [[ -f "$ZRAM_BACKUP" ]]; then
+        mv "$ZRAM_BACKUP" "$ZRAM_CONF"
+        ok "zram konfiguráció visszaállítva"
+    fi
+
+    systemctl disable --now systemd-oomd >/dev/null 2>&1 && ok "systemd-oomd leállítva"
+    systemctl daemon-reload
+    sysctl --system >/dev/null 2>&1
+    echo
+    info "A zram új méretéhez újraindítás kell."
+    echo
+    exit 0
+fi
+
+# ── beállítás ───────────────────────────────────────────────────────────────
+echo
+echo "${B}OOM-fagyás javítása${R}"
+echo
+
+# 1. systemd-oomd küszöbök
+mkdir -p "$(dirname "$OOMD_DROPIN")"
+cat > "$OOMD_DROPIN" <<'EOF'
+# A ~/dotfiles/scripts/fix-oom-freeze hozta létre.
+[OOM]
+# Ha a swap 90% fölé megy, a legnagyobb fogyasztó cgroup megölése.
+# Ezen a gépen a swap korábban 100%-ra futott, ami után jött a fagyás.
+SwapUsedLimit=90%
+
+# PSI memória-nyomás: ha egy cgroup tartósan 60% fölött vár memóriára,
+# ölés. A 20 s azért kell, hogy egy rövid csúcs (pl. build) ne öljön.
+DefaultMemoryPressureLimit=60%
+DefaultMemoryPressureDurationSec=20s
+EOF
+ok "systemd-oomd küszöbök: $OOMD_DROPIN"
+
+# 2. Swap-alapú ölés a gyökér slice-on
+mkdir -p "$(dirname "$ROOT_SLICE_DROPIN")"
+cat > "$ROOT_SLICE_DROPIN" <<'EOF'
+# A ~/dotfiles/scripts/fix-oom-freeze hozta létre.
+[Slice]
+# Enélkül a SwapUsedLimit nem lép működésbe: meg kell adni, hogy a
+# systemd-oomd melyik fán figyelje a swap-használatot.
+ManagedOOMSwap=kill
+EOF
+ok "swap-alapú ölés: $ROOT_SLICE_DROPIN"
+
+# 3. Nyomás-alapú ölés a felhasználói session-ön
+mkdir -p "$(dirname "$USER_SVC_DROPIN")"
+cat > "$USER_SVC_DROPIN" <<'EOF'
+# A ~/dotfiles/scripts/fix-oom-freeze hozta létre.
+[Service]
+# A grafikus session alatt futó appok (böngésző, Electron-appok, fejlesztői
+# eszközök) figyelése. A systemd-oomd a legrosszabb cgroupot öli, nem a
+# véletlenül kiválasztottat — így a compositor jó eséllyel életben marad.
+ManagedOOMMemoryPressure=kill
+ManagedOOMMemoryPressureLimit=60%
+EOF
+ok "nyomás-alapú ölés: $USER_SVC_DROPIN"
+
+# 4. zram növelése
+if [[ ! -f "$ZRAM_BACKUP" ]]; then
+    cp "$ZRAM_CONF" "$ZRAM_BACKUP" 2>/dev/null && info "eredeti zram config elmentve"
+fi
+cat > "$ZRAM_CONF" <<'EOF'
+# A ~/dotfiles/scripts/fix-oom-freeze módosította.
+# Az eredeti: zram-generator.conf.pre-oom-fix
+[zram0]
+# Az alapértelmezés min(RAM/2, 4G) volt, ami 4 GB-ot adott. A RAM negyede
+# ~8 GB; zstd-vel ez kb. 2,5-3 GB valódi RAM, mert tömörítve tárol.
+zram-size = ram / 4
+compression-algorithm = zstd
+EOF
+ok "zram: 4 GB → ram/4 (~8 GB)"
+
+# 5. Kernel hangolás zramhoz
+cat > "$SYSCTL_FILE" <<'EOF'
+# A ~/dotfiles/scripts/fix-oom-freeze hozta létre.
+
+# A zram RAM-sebességű, ezért érdemes hamarabb lapozni rá, mint lemezre.
+# A 60-as alapértelmezés lemezes swapra van szabva.
+vm.swappiness = 150
+
+# zramnál nincs értelme előre több lapot beolvasni: a hozzáférés véletlen
+# elérésű és gyors. A 0 = egy lap egyszerre.
+vm.page-cluster = 0
+EOF
+ok "sysctl: swappiness 150, page-cluster 0"
+
+# ── aktiválás ───────────────────────────────────────────────────────────────
+echo
+systemctl daemon-reload
+sysctl --system >/dev/null 2>&1 && ok "sysctl alkalmazva (azonnal él)"
+
+if systemctl enable --now systemd-oomd >/dev/null 2>&1; then
+    ok "systemd-oomd bekapcsolva és elindítva"
+else
+    warn "a systemd-oomd indítása nem sikerült"
+    info "napló: journalctl -u systemd-oomd -n 30"
+fi
+
+echo
+echo "${B}Kész${R}"
+echo
+info "A systemd-oomd és a sysctl AZONNAL él."
+info "A nagyobb zram csak ÚJRAINDÍTÁS után lép érvénybe."
+echo
+echo "  Ellenőrzés:"
+echo "    ${CYN}fix-oom-freeze --status${R}"
+echo "    ${CYN}journalctl -u systemd-oomd -f${R}   ${D}(mit ölt meg és miért)${R}"
+echo
+echo "  Visszavonás:"
+echo "    ${CYN}sudo $0 --revert${R}"
+echo

@@ -425,6 +425,34 @@ else
     hint "majd a forkot is újra kell építeni: shell-rebuild"
 fi
 
+# ── 13. Környezeti útvonalak duplikálódása ──────────────────────────────────
+# Több shell-fájl fűzött hozzá feltétel nélkül ugyanahhoz a listához, ezért a
+# ~/.local/bin négyszer, a QML_IMPORT_PATH háromszor szerepelt. Önmagában nem
+# törik el semmi, de minden keresés végigmegy a duplikátumokon is, és ez a minta
+# nehezen észrevehető — a .zshenv-ben lévő `typeset -U path PATH` szünteti meg.
+# Fontos: a Hyprland session env-je a bejelentkezéskor jön létre, tehát a javítás
+# ott csak újbóli bejelentkezés után látszik.
+section "Környezeti útvonalak"
+env_dupes=0
+for var in PATH QML_IMPORT_PATH; do
+    val="${!var:-}"
+    [[ -z $val ]] && continue
+    dupes=$(printf '%s' "$val" | tr ':' '\n' | grep -v '^$' | sort | uniq -d)
+    if [[ -n $dupes ]]; then
+        env_dupes=1
+        while IFS= read -r d; do
+            n=$(printf '%s' "$val" | tr ':' '\n' | grep -cxF "$d")
+            warn "$var: ${n}x $d"
+        done <<< "$dupes"
+    fi
+done
+if [[ $env_dupes -eq 0 ]]; then
+    pass "nincs duplikált bejegyzés a PATH-ban és a QML_IMPORT_PATH-ban"
+else
+    hint "friss shellben már javított; a Hyprland session env-jéhez újbóli"
+    hint 'bejelentkezés kell (a .zshenv "typeset -U path PATH" gondoskodik róla)'
+fi
+
 # ── Összegzés ───────────────────────────────────────────────────────────────
 echo
 echo "═══════════════════════════════════════════════════════════════════"

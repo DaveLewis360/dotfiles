@@ -394,6 +394,34 @@ else
     warn "$PACDB nem található — nem Arch-alapú rendszer?"
 fi
 
+# ── 12. Quickshell ↔ Hyprland Lua IPC ───────────────────────────────────────
+# A Hyprland 0.55+ Lua confignál a hyprlang dispatch-szintaxis érvénytelen: a
+# "dispatch dpms off" Lua oldalon "hl.dispatch(dpms off)"-ként értékelődik ki, ami
+# szintaktikai hiba. A shell ezt kezeli, de csak ha a Hyprland.usingLua igaz —
+# ez a tulajdonság a Quickshellből jön (01834e9c, 2026-04-28). Régebbi
+# Quickshell-buildnél a tulajdonság nem létezik, így csendben false marad, és a
+# shell mindenhol a hyprlang-ágat küldi: workspace-kattintás, görgetés, speciális
+# workspace-ek, ablak-gombok, réteg-átlátszóság és az idle DPMS is némán elhal.
+section "Quickshell ↔ Hyprland Lua IPC"
+hypr_lua=0
+[[ -f "$HOME/.config/hypr/hyprland.lua" ]] && hypr_lua=1
+qs_types=$(ls /usr/lib/qt6/qml/Quickshell/Hyprland/*.qmltypes 2>/dev/null | head -1)
+
+if [[ $hypr_lua -eq 0 ]]; then
+    pass "a Hyprland nem Lua configot használ — nem érintett"
+elif [[ -z $qs_types ]]; then
+    warn "a Quickshell Hyprland modul qmltypes-a nem található"
+elif grep -q 'usingLua' "$qs_types"; then
+    pass "a Quickshell ismeri a usingLua-t (Lua dispatch működik)"
+else
+    fail "Lua config, de a Quickshell nem ismeri a usingLua-t"
+    hint "a shell hyprlang-szintaxist küld Lua-configos Hyprlandnak: a"
+    hint "workspace-kattintás, a görgetés, az ablak-gombok és az idle DPMS"
+    hint "némán nem működik (a naplóban: 'dispatch ... failed with error')"
+    hint "javítás: yay -S --rebuild quickshell-git && yay -S --rebuild caelestia-shell-git"
+    hint "majd a forkot is újra kell építeni: shell-rebuild"
+fi
+
 # ── Összegzés ───────────────────────────────────────────────────────────────
 echo
 echo "═══════════════════════════════════════════════════════════════════"

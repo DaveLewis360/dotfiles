@@ -1,0 +1,375 @@
+#!/usr/bin/env bash
+# =============================================================================
+# dotdoctor — a dotfiles rendszer állapot-ellenőrzése
+# =============================================================================
+# Minden ellenőrzés egy VALÓBAN előfordult hibához tartozik. A cél nem a
+# teljesség, hanem az, hogy a csendes hibák ne maradjanak észrevétlenek:
+# olyanok, amiktől valami egyszerűen nem történik meg, hibaüzenet nélkül.
+#
+#   symlinkek          egy törölt symlink-cél miatt a ghostty elvesztette az
+#                      áttetszőségét, és semmi nem jelezte
+#   parser-formátum    a Hyprland INDULÁSKOR választ .lua vagy .conf parsert;
+#                      ha nem egyezik a profillal, a config fele nem érvényes
+#   közös bindok       a SUPER+Y hónapokig halott volt, mert a fájlt, amiben
+#                      élt, egyetlen profil sem source-olta
+#   duplikált bindok   Hyprland ÖSSZEADJA a bindokat ugyanazon a gombon; két
+#                      toggle kioltja egymást, és úgy tűnik, semmi nem történik
+#   hivatkozott appok  a $browser=brave és $editor=codium évekig hamis volt
+#                      (a codium nincs is telepítve) — a bind csendben nem tett
+#                      semmit
+#   elavult blokkok    több profil ugyanabba a fájlba írja a közös beállításokat
+#
+# Használat:
+#   dotdoctor              minden ellenőrzés
+#   dotdoctor --quiet      csak a problémák (cronhoz/timerhez)
+#   dotdoctor --no-net     hálózati ellenőrzések nélkül (upstream drift)
+#
+# Kilépési kód: 0 = minden rendben, 1 = van hiba, 2 = a script hibája
+# =============================================================================
+
+set -uo pipefail
+
+DOTFILES="$HOME/dotfiles"
+PROFILES="$DOTFILES/profiles"
+STATE_DIR="$HOME/.local/state/dotfiles"
+
+QUIET=0
+NO_NET=0
+for a in "$@"; do
+    case "$a" in
+        --quiet) QUIET=1 ;;
+        --no-net) NO_NET=1 ;;
+        -h|--help) sed -n '3,30p' "$0" | sed 's/^# \?//'; exit 0 ;;
+        *) echo "Ismeretlen opció: $a" >&2; exit 2 ;;
+    esac
+done
+
+if [[ -t 1 ]]; then
+    B=$'\033[1m'; D=$'\033[2m'; R=$'\033[0m'
+    GRN=$'\033[32m'; YLW=$'\033[33m'; RED=$'\033[31m'; CYN=$'\033[36m'
+else
+    B=""; D=""; R=""; GRN=""; YLW=""; RED=""; CYN=""
+fi
+
+FAILS=0
+WARNS=0
+SECTION=""
+
+section() { SECTION="$1"; [[ $QUIET -eq 0 ]] && { echo; echo "${B}  $1${R}"; }; }
+pass()    { [[ $QUIET -eq 0 ]] && echo "    ${GRN}✓${R} $*"; }
+fail()    { echo "    ${RED}✗${R} $*"; FAILS=$((FAILS+1)); }
+warn()    { echo "    ${YLW}!${R} $*"; WARNS=$((WARNS+1)); }
+hint()    { echo "      ${D}$*${R}"; }
+
+active_profile() {
+    cat "$STATE_DIR/active_profile" 2>/dev/null && return 0
+    # Tartalék: a ~/.config/hypr symlink céljából olvassuk ki
+    local t
+    t=$(readlink "$HOME/.config/hypr" 2>/dev/null) || return 1
+    basename "$(dirname "$t")"
+}
+
+PROFILE="$(active_profile || true)"
+
+[[ $QUIET -eq 0 ]] && {
+    echo "═══════════════════════════════════════════════════════════════════"
+    echo "${B}  DOTDOCTOR${R}"
+    echo "═══════════════════════════════════════════════════════════════════"
+    echo "  aktív profil: ${CYN}${PROFILE:-?}${R}"
+}
+
+# ── 1. Symlinkek ────────────────────────────────────────────────────────────
+# Egy törött symlink csendes: az app egyszerűen az alapértelmezését használja.
+section "Symlinkek"
+broken=0
+while IFS= read -r link; do
+    if [[ ! -e "$link" ]]; then
+        fail "törött: ${link/#$HOME/~} → $(readlink "$link")"
+        broken=$((broken+1))
+    fi
+done < <(find "$HOME/.config" -maxdepth 3 -type l 2>/dev/null \
+         | grep -vE "Singleton|/SS$|pulse/.*-runtime")
+[[ $broken -eq 0 ]] && pass "nincs törött symlink a ~/.config alatt"
+
+# A symlink-LÁNCOK is fontosak: a ghostty configja symlink egy symlinkre
+for chain in "$HOME/.config/ghostty/config" "$HOME/.config/btop/btop.conf" \
+             "$HOME/.config/caelestia/shell.json" "$HOME/.config/caelestia/cli.json"; do
+    if [[ -L "$chain" || -e "$chain" ]]; then
+        if [[ -e "$chain" ]]; then
+            pass "feloldható: ${chain/#$HOME/~}"
+        else
+            fail "lánc megszakadt: ${chain/#$HOME/~} → $(readlink "$chain")"
+            hint "a cél nem létezik — az app az alapértelmezését fogja használni"
+        fi
+    else
+        warn "nincs: ${chain/#$HOME/~}"
+    fi
+done
+
+# ── 2. Hyprland parser-formátum ─────────────────────────────────────────────
+# A Hyprland induláskor dönt: ha van hyprland.lua, azt tölti. Ha a profil
+# .conf-alapú, de maradt egy .lua, akkor a .conf-ot SENKI nem olvassa.
+section "Hyprland parser"
+hypr_dir="$HOME/.config/hypr"
+if [[ -f "$hypr_dir/hyprland.lua" ]]; then
+    active_parser="lua"
+elif [[ -f "$hypr_dir/hyprland.conf" ]]; then
+    active_parser="conf"
+else
+    active_parser="?"
+fi
+running_parser=$(hyprctl -j version 2>/dev/null | python3 -c \
+    'import json,sys; print(json.load(sys.stdin).get("configProvider","?"))' 2>/dev/null || echo "?")
+[[ "$running_parser" == "?" ]] && running_parser=$(hyprctl getoption misc:config_provider 2>/dev/null | head -1 || echo "?")
+
+pass "a fájlok szerint: $active_parser"
+if [[ -f "$hypr_dir/hyprland.lua" && -f "$hypr_dir/hyprland.conf" ]]; then
+    lua_age=$(stat -c %Y "$hypr_dir/hyprland.lua" 2>/dev/null || echo 0)
+    conf_age=$(stat -c %Y "$hypr_dir/hyprland.conf" 2>/dev/null || echo 0)
+    if [[ "$conf_age" -gt "$lua_age" ]]; then
+        warn "a hyprland.conf ÚJABB, mint a .lua — a Hyprland a .lua-t tölti"
+        hint "regenerálás: python3 ~/dotfiles/scripts/translate_hypr_lua.py ~/.config/hypr"
+    else
+        pass ".lua naprakész a .conf-hoz képest"
+    fi
+fi
+
+# ── 3. Hyprland configerrors ────────────────────────────────────────────────
+section "Hyprland config"
+if command -v hyprctl >/dev/null 2>&1 && hyprctl version >/dev/null 2>&1; then
+    # A grep -c 0 találatnál 1-es kóddal tér vissza, ezért a '|| echo 0' egy
+    # MÁSODIK nullát írna a változóba, és az aritmetikai összehasonlítás elhasal.
+    errs=$(hyprctl configerrors 2>/dev/null | grep -v '^$' | wc -l | tr -d '[:space:]')
+    errs=${errs:-0}
+    if [[ "$errs" -eq 0 ]]; then
+        pass "0 configerror"
+    else
+        fail "$errs configerror"
+        hyprctl configerrors 2>/dev/null | grep -v '^$' | head -4 | sed 's/^/      /'
+    fi
+else
+    warn "a Hyprland nem fut — a futásidejű ellenőrzések kimaradnak"
+fi
+
+# ── 4. Közös bindok tényleg regisztráltak? ──────────────────────────────────
+# Ez a SUPER+Y esete: a bind ott volt egy fájlban, amit senki nem source-olt.
+section "Közös bindok (shared/common.json)"
+if hyprctl version >/dev/null 2>&1; then
+    python3 - "$DOTFILES/shared/common.json" <<'PY'
+import json, subprocess, sys
+
+MODS = {"SUPER": 64, "CTRL": 4, "ALT": 8, "SHIFT": 1}
+GRN, RED, YLW, DIM, R = "\033[32m", "\033[31m", "\033[33m", "\033[2m", "\033[0m"
+
+try:
+    cfg = json.load(open(sys.argv[1]))
+except Exception as e:
+    print(f"    {RED}✗{R} common.json nem olvasható: {e}")
+    sys.exit(0)
+
+try:
+    binds = json.loads(subprocess.run(["hyprctl", "-j", "binds"],
+                                      capture_output=True, text=True).stdout)
+except Exception:
+    print(f"    {YLW}!{R} a hyprctl binds nem olvasható")
+    sys.exit(0)
+
+def mask(keys):
+    m = 0
+    for p in keys.split(",")[0].split("+"):
+        m |= MODS.get(p.strip().upper(), 0)
+    return m
+
+def keyname(keys):
+    parts = [p.strip() for p in keys.replace("+", ",").split(",") if p.strip()]
+    for p in reversed(parts):
+        if p.upper() not in MODS:
+            return p.upper()
+    return parts[-1].upper() if parts else ""
+
+problems = 0
+entries = [b for b in cfg.get("binds", []) if isinstance(b, dict) and b.get("keys")]
+entries += [a for a in cfg.get("actions", []) if isinstance(a, dict) and a.get("keys")]
+
+for e in entries:
+    keys = e["keys"]
+    want_mask, want_key = mask(keys), keyname(keys)
+    hits = [b for b in binds
+            if str(b.get("key", "")).upper() == want_key and b.get("modmask") == want_mask]
+    label = e.get("description") or e.get("action") or keys
+    if len(hits) == 0:
+        print(f"    {RED}✗{R} {keys:<22} nincs regisztrálva  {DIM}({label}){R}")
+        print(f"      {DIM}a bind nem ért el a Hyprlandig — a fájlt, amibe került, "
+              f"talán nem source-olja semmi{R}")
+        problems += 1
+    elif len(hits) > 1:
+        print(f"    {RED}✗{R} {keys:<22} {len(hits)} bind ugyanazon a gombon  {DIM}({label}){R}")
+        print(f"      {DIM}Hyprland ÖSSZEADJA a bindokat: két toggle kioltja egymást{R}")
+        problems += 1
+
+if problems == 0:
+    print(f"    {GRN}✓{R} mind a {len(entries)} közös bind pontosan egyszer regisztrált")
+sys.exit(1 if problems else 0)
+PY
+    [[ $? -ne 0 ]] && FAILS=$((FAILS+1))
+else
+    warn "a Hyprland nem fut — a bindokat nem tudom ellenőrizni"
+fi
+
+# ── 5. Hivatkozott appok léteznek? ──────────────────────────────────────────
+# A $browser=brave / $editor=codium eset: a bind létezett, az app nem.
+section "Hivatkozott programok"
+defs="$PROFILES/$PROFILE/hypr/core/definitions.conf"
+if [[ -f "$defs" ]]; then
+    while IFS= read -r line; do
+        var=$(echo "$line" | sed -E 's/^\$([a-zA-Z]+)\s*=\s*(.+)$/\1/')
+        val=$(echo "$line" | sed -E 's/^\$([a-zA-Z]+)\s*=\s*(.+)$/\2/' | awk '{print $1}')
+        [[ -z "$val" ]] && continue
+        if command -v "$val" >/dev/null 2>&1; then
+            pass "\$$var = $val"
+        else
+            fail "\$$var = $val — NINCS telepítve"
+            hint "a rá kötött bind csendben nem fog semmit tenni"
+        fi
+    done < <(grep -E '^\$(terminal|browser|editor|fileExplorer)\s*=' "$defs" 2>/dev/null)
+else
+    warn "nincs definitions.conf ebben a profilban ($PROFILE)"
+fi
+
+# A cliToggles parancsai (SUPER+D / M / T)
+if [[ -f "$HOME/.config/caelestia/cli.json" ]]; then
+    python3 - "$HOME/.config/caelestia/cli.json" <<'PY'
+import json, shutil, sys
+GRN, RED, DIM, R = "\033[32m", "\033[31m", "\033[2m", "\033[0m"
+try:
+    toggles = json.load(open(sys.argv[1])).get("toggles", {})
+except Exception:
+    sys.exit(0)
+bad = 0
+for ws, apps in toggles.items():
+    if ws.startswith("_"):
+        continue
+    for app, cfg in apps.items():
+        cmd = (cfg.get("command") or [""])[0]
+        if not cmd:
+            continue
+        if shutil.which(cmd):
+            print(f"    {GRN}✓{R} toggle {ws}: {cmd}")
+        else:
+            print(f"    {RED}✗{R} toggle {ws}: {cmd} — NINCS telepítve")
+            print(f"      {DIM}a SUPER-bind megnyitná a workspace-t, de üresen{R}")
+            bad += 1
+sys.exit(1 if bad else 0)
+PY
+    [[ $? -ne 0 ]] && FAILS=$((FAILS+1))
+fi
+
+# ── 6. Elavult managed blokkok ──────────────────────────────────────────────
+# Több profil ugyanabba a fájlba írhat; a bennemaradt blokk duplikál.
+section "Közös overlay"
+cur_target=$(python3 -c "
+import json
+try: print(json.load(open('$PROFILES/$PROFILE/.meta.json')).get('overlay_target',''))
+except Exception: print('')" 2>/dev/null)
+stale=0
+for p in "$PROFILES"/*/; do
+    name=$(basename "$p")
+    [[ "$name" == "$PROFILE" ]] && continue
+    t=$(python3 -c "
+import json
+try: print(json.load(open('$p/.meta.json')).get('overlay_target',''))
+except Exception: print('')" 2>/dev/null)
+    [[ -z "$t" || "$t" == "$cur_target" ]] && continue
+    if [[ -f "$HOME/$t" ]] && grep -q "dotswitch managed" "$HOME/$t" 2>/dev/null; then
+        fail "elavult managed blokk: ~/$t ($name profil)"
+        hint "duplikált bindokat okozhat — a dotswitch váltáskor kitakarítja"
+        stale=$((stale+1))
+    fi
+done
+[[ $stale -eq 0 ]] && pass "nincs elavult managed blokk más profil célfájljában"
+
+if [[ -n "$cur_target" ]]; then
+    if [[ -f "$HOME/$cur_target" ]] && grep -q "dotswitch managed" "$HOME/$cur_target" 2>/dev/null; then
+        pass "az aktív profil overlay-e a helyén (~/$cur_target)"
+    else
+        fail "az aktív profil overlay-e HIÁNYZIK: ~/$cur_target"
+        hint "a közös beállítások nem érvényesek — futtasd: dotswitch $PROFILE"
+    fi
+fi
+
+# ── 7. Univerzális app-configok ─────────────────────────────────────────────
+section "Univerzális app-configok (apps/)"
+if [[ -d "$DOTFILES/apps" ]]; then
+    n=0; bad=0
+    while IFS= read -r src; do
+        rel="${src#$DOTFILES/apps/}"
+        target="$HOME/.config/$rel"
+        n=$((n+1))
+        if [[ -L "$target" && "$(readlink -f "$target")" == "$(readlink -f "$src")" ]]; then
+            :
+        else
+            fail "nincs bekötve: ~/.config/$rel"
+            bad=$((bad+1))
+        fi
+    done < <(find "$DOTFILES/apps" -type f 2>/dev/null)
+    [[ $bad -eq 0 ]] && pass "mind a $n app-config bekötve"
+else
+    warn "nincs apps/ könyvtár"
+fi
+
+# ── 8. Shell ────────────────────────────────────────────────────────────────
+section "Quickshell"
+if pgrep -x qs >/dev/null 2>&1; then
+    pid=$(pgrep -x qs | head -1)
+    log="/run/user/$(id -u)/quickshell/by-pid/$pid/log.qslog"
+    pass "fut (PID $pid)"
+    if [[ -r "$log" ]] && command -v qs >/dev/null 2>&1; then
+        n=$(qs log "$log" 2>/dev/null \
+            | grep -iE "error|cannot|unable|is not a type" \
+            | grep -viE "Hypr.qml|imagecache|mpris|dbus" | wc -l)
+        if [[ "$n" -eq 0 ]]; then
+            pass "0 QML hiba a naplóban"
+        else
+            warn "$n QML hiba/figyelmeztetés"
+            hint "qs log $log | grep -i error"
+        fi
+    fi
+else
+    fail "a Quickshell nem fut"
+fi
+
+# ── 9. Upstream elmozdulás ──────────────────────────────────────────────────
+if [[ $NO_NET -eq 0 ]]; then
+    section "Fork ↔ upstream"
+    if [[ -x "$DOTFILES/scripts/fork-drift" ]]; then
+        if "$DOTFILES/scripts/fork-drift" >/dev/null 2>&1; then
+            pass "a vendorolt fájlok naprakészek"
+        else
+            warn "van upstream elmozdulás"
+            hint "részletek: fork-drift"
+        fi
+    fi
+fi
+
+# ── 10. OOM-védelem ─────────────────────────────────────────────────────────
+section "Memória-védelem"
+if [[ "$(systemctl is-active systemd-oomd 2>/dev/null)" == "active" ]]; then
+    pass "systemd-oomd fut"
+else
+    warn "systemd-oomd nem fut — RAM-telítődésnél a gép lefagyhat"
+    hint "javítás: sudo ~/dotfiles/scripts/fix-oom-freeze"
+fi
+
+# ── Összegzés ───────────────────────────────────────────────────────────────
+echo
+echo "═══════════════════════════════════════════════════════════════════"
+if [[ $FAILS -eq 0 && $WARNS -eq 0 ]]; then
+    echo "  ${GRN}${B}Minden rendben.${R}"
+elif [[ $FAILS -eq 0 ]]; then
+    echo "  ${YLW}${B}$WARNS figyelmeztetés${R}${YLW}, hiba nincs.${R}"
+else
+    echo "  ${RED}${B}$FAILS hiba${R}${RED}, $WARNS figyelmeztetés.${R}"
+fi
+echo "═══════════════════════════════════════════════════════════════════"
+[[ $FAILS -gt 0 ]] && exit 1
+exit 0

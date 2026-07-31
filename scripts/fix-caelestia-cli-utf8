@@ -1,0 +1,125 @@
+#!/usr/bin/env bash
+# =============================================================================
+# fix-caelestia-cli-utf8 — patches a UTF-8 bug in the caelestia CLI
+# =============================================================================
+# Symptom
+#   SUPER+D / SUPER+M (and any other `caelestia toggle <name>`) silently do
+#   nothing, while SUPER+S still works. Intermittent — depends on how many
+#   windows are open and how long their titles are.
+#
+# Cause
+#   caelestia/utils/hypr.py reads the Hyprland IPC socket in 8192-byte chunks
+#   and calls .decode() on EACH chunk:
+#
+#       resp = sock.recv(8192).decode()
+#       while True:
+#           new_resp = sock.recv(8192)
+#           if not new_resp: break
+#           resp += new_resp.decode()
+#
+#   When a multi-byte UTF-8 character straddles a chunk boundary, the first
+#   chunk ends mid-character and .decode() raises:
+#
+#       UnicodeDecodeError: 'utf-8' codec can't decode byte 0xe2
+#       in position 8191: unexpected end of data
+#
+#   Window titles are full of such characters — em dashes, and the invisible
+#   bidi mark U+2069 (e2 81 a9) that browsers insert.
+#
+#   `toggle specialws` survives because it never calls get_clients(), so it
+#   never reads a response large enough to be split.
+#
+# Fix
+#   Accumulate bytes, decode once at the end.
+#
+# Note
+#   This patches a file owned by the caelestia-cli package, so a package update
+#   will revert it. Re-run this script if the bug comes back. The proper fix is
+#   upstream: https://github.com/caelestia-dots/cli
+#
+# Usage
+#   sudo ~/dotfiles/scripts/fix-caelestia-cli-utf8
+#   sudo ~/dotfiles/scripts/fix-caelestia-cli-utf8 --revert
+# =============================================================================
+
+set -uo pipefail
+
+REVERT=0
+[[ "${1:-}" == "--revert" ]] && REVERT=1
+
+TARGET="$(python3 -c 'import caelestia.utils.hypr as m; print(m.__file__)' 2>/dev/null)"
+if [[ -z "$TARGET" || ! -f "$TARGET" ]]; then
+    echo "Could not locate caelestia.utils.hypr — is caelestia-cli installed?" >&2
+    exit 1
+fi
+echo "  target: $TARGET"
+
+BACKUP="${TARGET}.pre-utf8-fix"
+
+if [[ $REVERT -eq 1 ]]; then
+    if [[ -f "$BACKUP" ]]; then
+        cp "$BACKUP" "$TARGET" && echo "  reverted from $BACKUP"
+    else
+        echo "  no backup found at $BACKUP" >&2
+        exit 1
+    fi
+    exit 0
+fi
+
+[[ -f "$BACKUP" ]] || cp "$TARGET" "$BACKUP"
+
+python3 - "$TARGET" <<'PY'
+import pathlib
+import sys
+
+path = pathlib.Path(sys.argv[1])
+src = path.read_text()
+
+old = '''        resp = sock.recv(8192).decode()
+        while True:
+            new_resp = sock.recv(8192)
+            if not new_resp:
+                break
+            resp += new_resp.decode()
+'''
+
+new = '''        # Accumulate BYTES and decode once. Decoding each 8192-byte chunk
+        # separately breaks whenever a multi-byte UTF-8 character straddles a
+        # chunk boundary -- common in window titles, which contain em dashes and
+        # invisible bidi marks such as U+2069.
+        buf = b""
+        while True:
+            chunk = sock.recv(8192)
+            if not chunk:
+                break
+            buf += chunk
+        resp = buf.decode()
+'''
+
+if new.strip() in src:
+    print("  already patched, nothing to do")
+    sys.exit(0)
+
+if old not in src:
+    print("  the expected code was not found — upstream may have changed it.")
+    print("  Nothing was modified. Check the file manually:")
+    print(f"    {path}")
+    sys.exit(1)
+
+path.write_text(src.replace(old, new))
+print("  patched")
+PY
+rc=$?
+
+if [[ $rc -eq 0 ]]; then
+    # Drop stale bytecode so the patched source is definitely used
+    find "$(dirname "$TARGET")/__pycache__" -name 'hypr.*' -delete 2>/dev/null
+    echo
+    echo "  Test it:"
+    echo "    caelestia toggle music"
+    echo "    caelestia toggle communication"
+    echo
+    echo "  Undo:"
+    echo "    sudo $0 --revert"
+fi
+exit $rc

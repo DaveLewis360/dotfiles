@@ -1,0 +1,165 @@
+#!/usr/bin/env bash
+# =============================================================================
+# fork-check — a fork ellenőrzése push előtt, helyben
+# =============================================================================
+# Ugyanazokat a kapukat futtatja, mint az upstream CI, csak itt tényleg
+# ellenőrizhető az eredmény.
+#
+# Miért kell külön script: az upstream workflow-k egy konténer-image-et
+# használnak (ghcr.io/<owner>/shell-arch-env), amit az upstream saját
+# update-image.yml workflow-ja épít. A fork alatt ez az image nem létezik, és
+# az upstream példánya sem publikus (HTTP 403) — tehát azok a workflow-k a
+# forkban nem tudnak lefutni, bármit is tartalmaz a kód.
+#
+# Használat:
+#   fork-check            minden kapu
+#   fork-check --fix      a biztonságosan javíthatók javítása (csak qmlformat)
+#   fork-check --repo <p>
+#
+# Kilépési kód: 0 = minden kapu zöld, 1 = van hiba
+#
+# FIGYELEM: a scripts/qml-lint-conventions.py --fix-et NEM futtatjuk.
+# Az átrendezi a kódot, és ezzel szemantikát változtat: egyszer már eltörte a
+# MiniDash-t azzal, hogy az importok sorrendjét átírta, és így a Quickshell
+# NEM létrehozható ObjectModel-je árnyékolta a QtQml.Models létrehozhatóját.
+# =============================================================================
+
+set -uo pipefail
+
+REPO="${HOME}/Reference/my-caelestia-shell"
+FIX=0
+
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --fix)  FIX=1; shift ;;
+        --repo) REPO="${2:?}"; shift 2 ;;
+        -h|--help) sed -n '3,24p' "$0" | sed 's/^# \?//'; exit 0 ;;
+        *) echo "Ismeretlen opció: $1" >&2; exit 2 ;;
+    esac
+done
+
+if [[ -t 1 ]]; then
+    B=$'\033[1m'; D=$'\033[2m'; R=$'\033[0m'
+    GRN=$'\033[32m'; YLW=$'\033[33m'; RED=$'\033[31m'
+else
+    B=""; D=""; R=""; GRN=""; YLW=""; RED=""
+fi
+
+cd "$REPO" || { echo "Nincs ilyen repó: $REPO" >&2; exit 2; }
+
+QMLFORMAT=/usr/lib/qt6/bin/qmlformat
+[[ -x "$QMLFORMAT" ]] || QMLFORMAT=$(command -v qmlformat 2>/dev/null || true)
+
+FAILS=0
+echo
+echo "${B}  FORK-CHECK — $(basename "$REPO")${R}"
+echo "  ─────────────────────────────────────────────────────────────"
+
+# ── 1. QML formázás ─────────────────────────────────────────────────────────
+echo
+echo "${B}  QML formázás (qmlformat)${R}"
+if [[ -z "$QMLFORMAT" ]]; then
+    echo "    ${YLW}!${R} qmlformat nem található — kihagyva"
+else
+    bad=()
+    while IFS= read -r f; do
+        "$QMLFORMAT" "$f" 2>/dev/null | diff -q "$f" - >/dev/null 2>&1 || bad+=("$f")
+    done < <(find . -name "*.qml" -not -path "./build/*" 2>/dev/null | sort)
+
+    total=$(find . -name "*.qml" -not -path "./build/*" 2>/dev/null | wc -l)
+    if [[ ${#bad[@]} -eq 0 ]]; then
+        echo "    ${GRN}✓${R} mind a $total fájl megfelel"
+    elif [[ $FIX -eq 1 ]]; then
+        for f in "${bad[@]}"; do
+            "$QMLFORMAT" -i "$f" 2>/dev/null && echo "    ${GRN}✓${R} formázva: $f"
+        done
+    else
+        echo "    ${RED}✗${R} ${#bad[@]} fájl nem megfelelő:"
+        printf '        %s\n' "${bad[@]}"
+        echo "      ${D}javítás: fork-check --fix${R}"
+        FAILS=$((FAILS+1))
+    fi
+fi
+
+# ── 2. C++ formázás ─────────────────────────────────────────────────────────
+echo
+echo "${B}  C++ formázás (clang-format)${R}"
+if command -v clang-format >/dev/null 2>&1; then
+    cpp_out=$(find plugin extras -name '*.cpp' -o -name '*.hpp' 2>/dev/null \
+              | xargs -r clang-format --dry-run --Werror 2>&1)
+    if [[ -z "$cpp_out" ]]; then
+        echo "    ${GRN}✓${R} megfelel"
+    else
+        echo "    ${RED}✗${R} eltérés:"
+        echo "$cpp_out" | head -6 | sed 's/^/        /'
+        FAILS=$((FAILS+1))
+    fi
+else
+    echo "    ${YLW}!${R} clang-format nem található — kihagyva"
+fi
+
+# ── 3. Konvenciók ───────────────────────────────────────────────────────────
+echo
+echo "${B}  QML konvenciók${R}"
+if [[ -f scripts/qml-lint-conventions.py ]]; then
+    conv_out=$(python3 scripts/qml-lint-conventions.py 2>/dev/null || true)
+    n=$(echo "$conv_out" | grep -cE "\[(section-order|import-order|missing-section-separator)\]" || true)
+    if [[ "$n" -eq 0 ]]; then
+        echo "    ${GRN}✓${R} nincs jelzés"
+    else
+        echo "    ${YLW}!${R} $n jelzés ${D}(nem blokkoló — lásd a script fejlécét)${R}"
+        echo "$conv_out" | grep -oE "\[[a-z-]+\]" | sort | uniq -c | sort -rn | sed 's/^/        /'
+        echo "      ${D}részletek: python3 scripts/qml-lint-conventions.py${R}"
+    fi
+else
+    echo "    ${YLW}!${R} nincs qml-lint-conventions.py"
+fi
+
+# ── 4. qmllint ──────────────────────────────────────────────────────────────
+echo
+echo "${B}  qmllint (a fork saját fájljain)${R}"
+QMLLINT=/usr/lib/qt6/bin/qmllint
+[[ -x "$QMLLINT" ]] || QMLLINT=$(command -v qmllint 2>/dev/null || true)
+if [[ -n "$QMLLINT" && -d build/qml ]]; then
+    lint_out=$("$QMLLINT" --import disable -I build/qml -I . \
+               custom/*.qml custom/bar/*.qml 2>&1 | grep -vE "^$" || true)
+    if [[ -z "$lint_out" ]]; then
+        echo "    ${GRN}✓${R} nincs jelzés"
+    else
+        echo "    ${YLW}!${R} jelzések:"
+        echo "$lint_out" | head -8 | sed 's/^/        /'
+    fi
+else
+    echo "    ${YLW}!${R} qmllint vagy build/qml hiányzik — előbb: shell-rebuild"
+fi
+
+# ── 5. Indul-e a shell ──────────────────────────────────────────────────────
+echo
+echo "${B}  Betöltési próba${R}"
+if command -v qs >/dev/null 2>&1 && [[ -d build/qml ]]; then
+    # Strip ANSI colour codes with sed (GNU sed understands \x1b, GNU grep does
+    # not — passing \x1b to grep only produced "stray \ before x"), then match
+    # the plain text.
+    load_out=$(QML_IMPORT_PATH="$PWD/build/qml" timeout 12 qs -c caelestia -n 2>&1 \
+               | sed -E 's/\x1b\[[0-9;]*[a-zA-Z]//g' \
+               | grep -E "ERROR|caused by" | head -6 || true)
+    if [[ -z "$load_out" ]]; then
+        echo "    ${GRN}✓${R} a shell betöltődik"
+    else
+        echo "    ${RED}✗${R} betöltési hiba:"
+        echo "$load_out" | sed 's/^/        /'
+        FAILS=$((FAILS+1))
+    fi
+else
+    echo "    ${YLW}!${R} kihagyva (nincs qs vagy build/qml)"
+fi
+
+echo
+echo "  ─────────────────────────────────────────────────────────────"
+if [[ $FAILS -eq 0 ]]; then
+    echo "  ${GRN}${B}Minden kapu zöld.${R}"
+else
+    echo "  ${RED}${B}$FAILS kapu elhasalt.${R}"
+fi
+echo
+exit $((FAILS > 0))

@@ -290,7 +290,7 @@ if [[ "$RESOLVED" -gt 0 ]]; then
 fi
 
 echo "  ${C_B}Konfliktusos fájlok, kockázati csoport szerint${C_0}"
-echo "  ${C_DIM}(a csoportok leírása: $REPO/CUSTOMIZATIONS.md)${C_0}"
+echo "  ${C_DIM}(a csoportok leírása: $REPO/docs/ARCHITECTURE.md)${C_0}"
 echo
 while IFS= read -r f; do
     [[ -z "$f" ]] && continue

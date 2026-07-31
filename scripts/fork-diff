@@ -42,7 +42,7 @@ BASE=$(git merge-base HEAD upstream/main)
 # --- kockázati csoport egy fájlútvonalhoz ---
 group_of() {
     case "$1" in
-        custom/*|CUSTOMIZATIONS.md|.gitignore)
+        custom/*|docs/*|.gitignore)
             echo "0" ;;   # fork-only: nincs konfliktus
         modules/bar/*|modules/drawers/*|modules/osd/*)
             echo "1" ;;   # horizontális bar
@@ -173,5 +173,5 @@ hr
 echo "  fork-diff --files      fájlonkénti bontás"
 echo "  fork-diff --forecast   mi fog ütközni a következő merge-nél"
 echo "  fork-diff --show <f>   egy fájl diffje"
-echo "  Részletes leírás: $REPO/CUSTOMIZATIONS.md"
+echo "  Részletes leírás: $REPO/docs/ARCHITECTURE.md"
 hr

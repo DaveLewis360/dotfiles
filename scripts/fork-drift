@@ -1,0 +1,204 @@
+#!/usr/bin/env bash
+# ==============================================================================
+# fork-drift — szól, ha az upstream hozzányúlt olyan fájlhoz, ami téged érint
+# ==============================================================================
+# A coexistence-modell (custom/bar/H*.qml = upstream fájlok másolatai) egyetlen
+# gyengéje, hogy a másolatok CSENDBEN elavulnak: ha az upstream javít valamit a
+# Bar.qml-ben, te azt nem kapod meg, és nem is jelez semmi. Ez a script pótolja
+# a jelzést.
+#
+# Két dolgot vizsgál:
+#
+#   1. VENDOROLT fájlok (custom/bar/VENDORED.json)
+#      Az ott rögzített upstream blob-hasht összeveti az upstream jelenlegi
+#      állapotával. Ha eltér, a másolatod elavult — kézzel kell átvinni.
+#
+#   2. PATCHELT upstream fájlok
+#      Amiket a fork a helyükön módosít. Ezeket a merge kezeli, de jó tudni,
+#      ha sok változás jön, mert az konfliktust jelent.
+#
+# Használat:
+#   fork-drift                 emberi összefoglaló
+#   fork-drift --notify        értesítést is küld, ha van elmozdulás
+#   fork-drift --quiet         csak akkor ír/értesít, ha VAN elmozdulás (timer)
+#   fork-drift --show <fájl>   egy vendorolt fájl upstream diffje
+#   fork-drift --no-fetch      ne hívja a hálózatot (a meglévő refeket használja)
+#
+# Kilépési kód: 0 = nincs elmozdulás, 1 = van, 2 = hiba
+# ==============================================================================
+
+set -uo pipefail
+
+REPO="${FORK_DRIFT_REPO:-$HOME/Reference/my-caelestia-shell}"
+VENDORED="custom/bar/VENDORED.json"
+UPSTREAM_REF="upstream/main"
+
+MODE="report"
+DO_NOTIFY=0
+QUIET=0
+DO_FETCH=1
+SHOW_FILE=""
+
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --notify)   DO_NOTIFY=1; shift ;;
+        --quiet)    QUIET=1; DO_NOTIFY=1; shift ;;
+        --no-fetch) DO_FETCH=0; shift ;;
+        --show)     MODE="show"; SHOW_FILE="${2:-}"; shift 2 ;;
+        --repo)     REPO="${2:-}"; shift 2 ;;
+        -h|--help)  sed -n '3,28p' "$0" | sed 's/^# \?//'; exit 0 ;;
+        *)          echo "fork-drift: ismeretlen opció: $1" >&2; exit 2 ;;
+    esac
+done
+
+c_reset=$'\033[0m'; c_bold=$'\033[1m'; c_dim=$'\033[2m'
+c_red=$'\033[31m'; c_green=$'\033[32m'; c_yellow=$'\033[33m'; c_cyan=$'\033[36m'
+
+[[ -d "$REPO/.git" ]] || { echo "fork-drift: nem git repó: $REPO" >&2; exit 2; }
+cd "$REPO" || exit 2
+[[ -f "$VENDORED" ]] || { echo "fork-drift: nincs $VENDORED" >&2; exit 2; }
+
+if [[ $DO_FETCH -eq 1 ]]; then
+    git fetch upstream --quiet 2>/dev/null || {
+        [[ $QUIET -eq 0 ]] && echo "  ${c_yellow}⚠ upstream fetch nem sikerült — a meglévő refekkel dolgozom${c_reset}"
+    }
+fi
+
+git rev-parse --verify "$UPSTREAM_REF" >/dev/null 2>&1 || {
+    echo "fork-drift: nincs $UPSTREAM_REF ref" >&2; exit 2; }
+
+# ── --show: egy vendorolt fájl upstream diffje ────────────────────────────────
+if [[ "$MODE" == "show" ]]; then
+    read -r up_path up_ref < <(python3 -c "
+import json,sys
+d=json.load(open('$VENDORED'))
+e=d.get('$SHOW_FILE')
+if not e: sys.exit('nincs ilyen vendorolt fájl: $SHOW_FILE')
+print(e['upstream_path'], e['upstream_ref'])
+") || exit 2
+    echo "  ${c_bold}$SHOW_FILE${c_reset}  ${c_dim}← $up_path${c_reset}"
+    echo "  ${c_dim}$up_ref → $UPSTREAM_REF${c_reset}"
+    echo
+    git diff "$up_ref".."$UPSTREAM_REF" -- "$up_path"
+    exit 0
+fi
+
+# ── Vendorolt fájlok vizsgálata ───────────────────────────────────────────────
+DRIFT_REPORT=$(python3 - "$VENDORED" "$UPSTREAM_REF" <<'PY'
+import json, subprocess, sys
+
+vendored_path, upstream_ref = sys.argv[1], sys.argv[2]
+
+def sh(*args):
+    return subprocess.run(args, capture_output=True, text=True).stdout.strip()
+
+data = json.load(open(vendored_path))
+drifted, clean, missing = [], [], []
+
+for local, meta in sorted(data.items()):
+    up = meta["upstream_path"]
+    recorded = meta["upstream_blob"]
+    current = sh("git", "rev-parse", f"{upstream_ref}:{up}")
+    if not current:
+        missing.append((local, up))
+        continue
+    if current == recorded:
+        clean.append(local)
+        continue
+    commits = sh("git", "log", "--oneline", f"{meta['upstream_ref']}..{upstream_ref}", "--", up)
+    n = len(commits.splitlines()) if commits else 0
+    stat = sh("git", "diff", "--numstat", f"{meta['upstream_ref']}..{upstream_ref}", "--", up)
+    ins = dele = 0
+    if stat:
+        parts = stat.split("\t")
+        if len(parts) >= 2:
+            ins = int(parts[0]) if parts[0].isdigit() else 0
+            dele = int(parts[1]) if parts[1].isdigit() else 0
+    drifted.append({"local": local, "upstream": up, "commits": n,
+                    "ins": ins, "del": dele,
+                    "log": commits.splitlines()[:4]})
+
+print(json.dumps({"drifted": drifted, "clean": clean, "missing": missing}))
+PY
+) || { echo "fork-drift: a vizsgálat hibára futott" >&2; exit 2; }
+
+N_DRIFT=$(python3 -c "import json,sys;print(len(json.loads(sys.stdin.read())['drifted']))" <<<"$DRIFT_REPORT")
+N_CLEAN=$(python3 -c "import json,sys;print(len(json.loads(sys.stdin.read())['clean']))" <<<"$DRIFT_REPORT")
+N_MISSING=$(python3 -c "import json,sys;print(len(json.loads(sys.stdin.read())['missing']))" <<<"$DRIFT_REPORT")
+
+# ── Patchelt upstream fájlok: mennyi változás jön rájuk ──────────────────────
+BASE=$(git merge-base HEAD "$UPSTREAM_REF" 2>/dev/null)
+PATCHED_INFO=""
+N_PATCHED_HIT=0
+if [[ -n "$BASE" ]]; then
+    # A fork által módosított upstream fájlok (a vendoroltakat nem számítva)
+    mapfile -t patched < <(git diff --name-only "$BASE"..HEAD -- \
+        | grep -vE '^custom/' | grep -vE '\.md$' || true)
+    for f in "${patched[@]}"; do
+        [[ -f "$f" ]] || continue
+        n=$(git log --oneline "$BASE".."$UPSTREAM_REF" -- "$f" 2>/dev/null | wc -l)
+        if [[ "$n" -gt 0 ]]; then
+            PATCHED_INFO+=$(printf "%s\t%s\n" "$n" "$f")
+            N_PATCHED_HIT=$((N_PATCHED_HIT + 1))
+        fi
+    done
+fi
+
+BEHIND=$(git rev-list --count HEAD.."$UPSTREAM_REF" 2>/dev/null || echo 0)
+
+# ── Kimenet ──────────────────────────────────────────────────────────────────
+HAS_DRIFT=0
+[[ "$N_DRIFT" -gt 0 || "$N_MISSING" -gt 0 ]] && HAS_DRIFT=1
+
+if [[ $QUIET -eq 0 || $HAS_DRIFT -eq 1 ]]; then
+    echo "═══════════════════════════════════════════════════════════════════"
+    echo "${c_bold}  FORK-DRIFT — $(basename "$REPO")${c_reset}"
+    echo "═══════════════════════════════════════════════════════════════════"
+    echo "  upstream:  $UPSTREAM_REF ($(git log -1 --format=%h "$UPSTREAM_REF"))"
+    echo "  lemaradás: $BEHIND commit"
+    echo
+
+    if [[ "$N_DRIFT" -eq 0 && "$N_MISSING" -eq 0 ]]; then
+        echo "  ${c_green}✓${c_reset} A $N_CLEAN vendorolt fájl mind naprakész."
+    else
+        echo "  ${c_red}${N_DRIFT} vendorolt fájl ELAVULT${c_reset} ${c_dim}(a másolatod nem tartalmazza az upstream javításait)${c_reset}"
+        [[ "$N_MISSING" -gt 0 ]] && echo "  ${c_yellow}${N_MISSING} fájl ELTŰNT az upstreamből${c_reset} ${c_dim}(átnevezés vagy törlés)${c_reset}"
+        echo "  ${c_green}${N_CLEAN}${c_reset} naprakész"
+        echo
+        python3 - <<PY
+import json
+d = json.loads('''$DRIFT_REPORT''')
+for e in d["drifted"]:
+    print(f"    \033[1m{e['local']}\033[0m  \033[2m← {e['upstream']}\033[0m")
+    print(f"        {e['commits']} commit, +{e['ins']} -{e['del']}")
+    for line in e["log"]:
+        print(f"        \033[2m· {line}\033[0m")
+    print()
+for local, up in d["missing"]:
+    print(f"    \033[33m{local}\033[0m  \033[2m← {up} (már nincs upstreamben)\033[0m")
+PY
+        echo "  ${c_dim}Egy fájl változásai:  fork-drift --show <fájlnév>${c_reset}"
+    fi
+
+    if [[ "$N_PATCHED_HIT" -gt 0 ]]; then
+        echo
+        echo "  ${c_cyan}Patchelt fájlok, amikre változás jön${c_reset} ${c_dim}(ezt a merge kezeli)${c_reset}"
+        echo "$PATCHED_INFO" | sort -rn | head -8 | while IFS=$'\t' read -r n f; do
+            [[ -n "$f" ]] && printf "    %2d commit  %s\n" "$n" "$f"
+        done
+    fi
+    echo "═══════════════════════════════════════════════════════════════════"
+fi
+
+# ── Értesítés ────────────────────────────────────────────────────────────────
+if [[ $DO_NOTIFY -eq 1 && $HAS_DRIFT -eq 1 ]]; then
+    msg="$N_DRIFT lemásolt bar-fájl elavult az upstreamhez képest."
+    [[ "$N_MISSING" -gt 0 ]] && msg+=" $N_MISSING fájl eltűnt upstreamből."
+    msg+=$'\n'"Részletek: fork-drift"
+    "$HOME/dotfiles/scripts/dotnotify" \
+        --title "Caelestia fork: upstream elmozdulás" \
+        --priority 4 --tags "warning,package" --urgency normal \
+        "$msg" || true
+fi
+
+exit $HAS_DRIFT

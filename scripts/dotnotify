@@ -1,0 +1,127 @@
+#!/usr/bin/env bash
+# ==============================================================================
+# dotnotify — egységes értesítés-küldés a dotfiles scriptekhez
+# ==============================================================================
+# Egy helyen dől el, hogyan mennek ki az értesítések. Így ha később másra
+# váltasz (ntfy, Gotify, webhook), csak ezt a fájlt kell átírni — a hívó
+# scriptek (fork-drift, dotdoctor) változatlanok maradnak.
+#
+# Használat:
+#   dotnotify [opciók] "<üzenet>"
+#     -t, --title     <str>   értesítés címe
+#     -p, --priority  <1-5>   1=min 3=default 5=max
+#     -T, --tags      <a,b>   ntfy tagek (emoji nevek)
+#     -u, --urgency   <low|normal|critical>  desktop sürgősség
+#         --dry-run           csak kiírja, mit küldene
+#
+# Hátterek (a config alapján, sorrendben mind megkapja):
+#   desktop   notify-send — ha van futó grafikus session
+#   ntfy-http közvetlen HTTPS POST (curl)
+#   ntfy-ssh  ssh <host> docker exec <konténer> ntfy publish
+#             (akkor hasznos, ha a szerver HTTPS-e nem elérhető)
+#
+# Konfiguráció (NEM kerül a repóba, lásd .gitignore):
+#   ~/.config/dotfiles/notify.env
+#       DOTNOTIFY_BACKENDS="desktop ntfy-ssh"
+#       NTFY_TOPIC=...
+#       NTFY_URL=https://...        # ntfy-http-hez
+#       NTFY_TOKEN=tk_...           # ha kell auth
+#       NTFY_SSH_HOST=homelab       # ntfy-ssh-hoz
+#       NTFY_SSH_CONTAINER=ntfy
+# ==============================================================================
+
+set -uo pipefail
+
+CONFIG="${XDG_CONFIG_HOME:-$HOME/.config}/dotfiles/notify.env"
+
+TITLE="dotfiles"
+MESSAGE=""
+PRIORITY=3
+TAGS=""
+URGENCY="normal"
+DRY_RUN=0
+
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        -t|--title)    TITLE="${2:-}"; shift 2 ;;
+        -p|--priority) PRIORITY="${2:-3}"; shift 2 ;;
+        -T|--tags)     TAGS="${2:-}"; shift 2 ;;
+        -u|--urgency)  URGENCY="${2:-normal}"; shift 2 ;;
+        --dry-run)     DRY_RUN=1; shift ;;
+        -h|--help)     sed -n '3,30p' "$0" | sed 's/^# \?//'; exit 0 ;;
+        -*)            echo "dotnotify: ismeretlen opció: $1" >&2; exit 2 ;;
+        *)             MESSAGE="$1"; shift ;;
+    esac
+done
+
+if [[ -z "$MESSAGE" ]]; then
+    echo "dotnotify: nincs üzenet" >&2
+    exit 2
+fi
+
+# shellcheck disable=SC1090
+[[ -f "$CONFIG" ]] && source "$CONFIG"
+
+BACKENDS="${DOTNOTIFY_BACKENDS:-desktop}"
+
+if [[ $DRY_RUN -eq 1 ]]; then
+    echo "  hátterek: $BACKENDS"
+    echo "  cím:      $TITLE"
+    echo "  üzenet:   $MESSAGE"
+    echo "  prio:     $PRIORITY   tagek: ${TAGS:-—}"
+    exit 0
+fi
+
+sent_any=0
+failed=""
+
+send_desktop() {
+    command -v notify-send >/dev/null 2>&1 || return 1
+    [[ -n "${WAYLAND_DISPLAY:-}${DISPLAY:-}" ]] || return 1
+    notify-send -u "$URGENCY" -a "dotfiles" "$TITLE" "$MESSAGE" 2>/dev/null
+}
+
+send_ntfy_http() {
+    [[ -n "${NTFY_URL:-}" && -n "${NTFY_TOPIC:-}" ]] || return 1
+    command -v curl >/dev/null 2>&1 || return 1
+    local -a args=(-s -o /dev/null -w '%{http_code}' --max-time 12
+                   -H "Title: $TITLE" -H "Priority: $PRIORITY")
+    [[ -n "$TAGS" ]] && args+=(-H "Tags: $TAGS")
+    [[ -n "${NTFY_TOKEN:-}" ]] && args+=(-H "Authorization: Bearer $NTFY_TOKEN")
+    local code
+    code=$(curl "${args[@]}" -d "$MESSAGE" "${NTFY_URL%/}/$NTFY_TOPIC" 2>/dev/null)
+    [[ "$code" == "200" ]]
+}
+
+send_ntfy_ssh() {
+    [[ -n "${NTFY_SSH_HOST:-}" && -n "${NTFY_TOPIC:-}" ]] || return 1
+    command -v ssh >/dev/null 2>&1 || return 1
+    local container="${NTFY_SSH_CONTAINER:-ntfy}"
+    local -a pub=(ntfy publish --title "$TITLE" --priority "$PRIORITY")
+    [[ -n "$TAGS" ]] && pub+=(--tags "$TAGS")
+    pub+=("$NTFY_TOPIC" "$MESSAGE")
+    # A printf %q gondoskodik a helyes escape-elésről a távoli shellben.
+    local remote
+    remote=$(printf 'docker exec %q' "$container")
+    for a in "${pub[@]}"; do remote+=$(printf ' %q' "$a"); done
+    timeout 25 ssh -o BatchMode=yes -o ConnectTimeout=8 "$NTFY_SSH_HOST" "$remote" >/dev/null 2>&1
+}
+
+for b in $BACKENDS; do
+    case "$b" in
+        desktop)   send_desktop   && sent_any=1 || failed+=" desktop" ;;
+        ntfy-http) send_ntfy_http && sent_any=1 || failed+=" ntfy-http" ;;
+        ntfy-ssh)  send_ntfy_ssh  && sent_any=1 || failed+=" ntfy-ssh" ;;
+        *)         failed+=" $b(ismeretlen)" ;;
+    esac
+done
+
+if [[ $sent_any -eq 0 ]]; then
+    # Soha ne veszítsünk el egy figyelmeztetést: ha semmi nem ment át, a
+    # stderr-re írjuk, hogy a systemd journal legalább megőrizze.
+    echo "dotnotify: egyik háttér sem sikerült (${failed# }) — $TITLE: $MESSAGE" >&2
+    exit 1
+fi
+
+[[ -n "$failed" ]] && echo "dotnotify: sikertelen háttér:${failed}" >&2
+exit 0

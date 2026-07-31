@@ -8,9 +8,7 @@
 # ==============================================================================
 
 # --- Beágyazott upstream git klónok (lásd profiles/UPSTREAM.md) ---
-/profiles/stable/
 /profiles/end4/
-/profiles/hyde/
 /profiles/my-caelestia/shell/
 
 # --- Ideiglenes / szerkesztői szemét ---

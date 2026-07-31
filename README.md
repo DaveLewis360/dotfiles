@@ -11,10 +11,8 @@ Frissítve: 2026-07-29
 
 ```bash
 dotswitch mine       # Saját Caelestia fork      ← ez a fejlesztendő
-dotswitch stable     # Caelestia stable
-dotswitch git        # Caelestia git (rolling)
+dotswitch git        # Caelestia upstream (git main)
 dotswitch end4       # end_4 Illogical Impulse
-dotswitch hyde       # HyDE
 
 dotswitch status     # aktív profil + minden symlink
 dotswitch list       # elérhető profilok
@@ -28,7 +26,7 @@ Váltás után **logout/login** javasolt a teljes hatáshoz.
 1. Leállítja a futó shellt (quickshell / qs / caelestia shell / waybar / dunst / swaync)
 2. Törli a QML cache-t (`~/.cache/quickshell/`)
 3. Beállítja a `QML_IMPORT_PATH`-ot a profil `.meta.json`-ja szerint
-4. Átirányítja a `~/.config/{hypr,fish,ghostty,foot,kitty,waybar,dunst,rofi,swaync,hyde}`
+4. Átirányítja a `~/.config/{hypr,fish,ghostty,foot,kitty,waybar,dunst,rofi,swaync}`
    symlinkeket a profilra (a `.meta.json` `configs` blokkja dönti el, melyiket)
 5. Generálja a Hyprland `.lua` configokat a `.conf`-okból (`translate_hypr_lua.py`)
 6. Beköti a `shell.json` / `cli.json`-t a `~/.config/caelestia/` alá
@@ -44,13 +42,8 @@ Váltás után **logout/login** javasolt a teljes hatáshoz.
 | Profil | Mi ez | Quickshell forrás |
 |---|---|---|
 | **`my-caelestia`** | **Saját fork** — horizontális bar, MiniDash, videó wallpaper | `~/Reference/my-caelestia-shell` |
-| `stable` | Caelestia upstream (stable vonal) | `~/Reference/caelestia-shell` |
-| `git` | Caelestia upstream (git main, rolling) | `~/Reference/caelestia-shell-git` |
+| `git` | Caelestia upstream (git main) — összehasonlítási alap | `~/Reference/caelestia-shell-git` |
 | `end4` | end-4/dots-hyprland | `profiles/end4/dots/.config/quickshell/ii` |
-| `hyde` | HyDE-Project/HyDE (waybar, nem quickshell) | — |
-
-`profiles/caelestia-upstream` egy symlink a `stable`-re, ezért a `dotswitch list`
-kétszer mutatja ugyanazt.
 
 A beágyazott upstream klónok nincsenek ebben a repóban (saját git történetük van) —
 lásd [`profiles/UPSTREAM.md`](profiles/UPSTREAM.md) a pontos commitokkal.
@@ -100,10 +93,8 @@ következő merge-nél automatikusan alkalmazza. Egy konfliktust elég egyszer m
 ~/dotfiles/
 ├── profiles/
 │   ├── my-caelestia/     SAJÁT — hypr, fish, foot, ghostty, shell.json, cli.json
-│   ├── stable/           upstream klón (gitignore)
 │   ├── git/              csak configok, a shellt a Reference-ből veszi
 │   ├── end4/             upstream klón (gitignore)
-│   ├── hyde/             upstream klón (gitignore)
 │   └── UPSTREAM.md       a klónok manifestje commit SHA-kkal
 ├── shared/               minden profilra érvényes
 │   ├── common.json       kb_layout stb. — EGY helyen szerkeszd

@@ -91,10 +91,8 @@ TIER2=(
 # SOHA NE — élő függőségek
 # ==============================================================================
 KEEP=(
-"$HOME/.local/share/hyde-themes|A HyDE 12 letöltött témája (310 MB). A hyde profil ezt használja a Configs/.config/hyde/themes symlinken keresztül. Csak akkor törölhető, ha a hyde profilt véglegesen elhagyod."
 "$HOME/dotfiles|Az élő, verziókövetett dotfiles rendszer."
 "$HOME/Reference/my-caelestia-shell|A saját fork — élő fejlesztés."
-"$HOME/Reference/caelestia-shell|A stable profil quickshell forrása."
 "$HOME/Reference/caelestia-shell-git|A git (rolling) profil quickshell forrása."
 "$HOME/.config/illogical-impulse|ÉLŐ config az end4 profilhoz (config.json-t az ii shell olvassa)."
 "$HOME/.config/caelestia|Élő caelestia config (assets, monitors, data)."
@@ -280,7 +278,7 @@ if [[ "$MODE" == "stage" ]]; then
     hr
     echo "  ${C_B}Most:${C_0}"
     echo "    1. Használd a gépet, ellenőrizd, hogy minden működik"
-    echo "       (dotswitch mine / stable / end4 / hyde, git identitás, terminálok)"
+    echo "       (dotswitch mine / stable / end4 / git, git identitás, terminálok)"
     echo "    2. Ha valami hiányzik:  dotclean --restore $TS"
     echo "    3. Ha pár nap után minden rendben:  dotclean --purge $TS"
     hr

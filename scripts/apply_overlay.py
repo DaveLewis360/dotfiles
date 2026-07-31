@@ -4,7 +4,7 @@
 A közös (rice-független) beállításokat (~/dotfiles/shared/common.json) ráteszi a profil
 user-override fájljára egy "managed block" formában, a profil natív formátumában:
   - lua      hl.config({ input = { ... } }) / hl.bind(...) / hl.config({ windowrule = ... })
-  - conf     igazi Hyprland conf (HyDE):        windowrule = RULE, class:^(...)$
+  - conf     igazi Hyprland conf:               windowrule = RULE, class:^(...)$
   - conf-hl  a translate_hypr_lua.py bemenete:  windowrule = RULE, match:class ^(...)$
 
 A conf-hl azért külön, mert ezt a fájlt nem a Hyprland olvassa, hanem a

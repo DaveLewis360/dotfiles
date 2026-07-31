@@ -53,7 +53,6 @@ CONFIG_ENTRIES=(
     "dunst:$HOME/.config/dunst"
     "rofi:$HOME/.config/rofi"
     "swaync:$HOME/.config/swaync"
-    "hyde:$HOME/.config/hyde"
 )
 
 # --- Find available profiles ---
@@ -70,37 +69,16 @@ list_profiles() {
     done
 }
 
-# --- Stop HyDE's systemd user units ---
-# A HyDE a démonjait systemd user unitokként/scope-okként indítja
-# (hyde-shell app -u hyde-<desktop>-<név>.service/.scope), ezért a puszta
-# pkill nem elég: a unitok futva maradnának a profilváltás után is.
-stop_hyde_units() {
-    local units
-    units=$(systemctl --user list-units --all --plain --no-legend 'hyde-*' 2>/dev/null | awk '{print $1}')
-    if [[ -z "$units" ]]; then
-        return 0
-    fi
-    echo "  HyDE systemd unitok leállítása..."
-    while IFS= read -r u; do
-        [[ -z "$u" ]] && continue
-        systemctl --user stop "$u" >/dev/null 2>&1 || true
-        log "HyDE unit leállítva: $u"
-    done <<< "$units"
-    # A scope-ok nem mindig állnak le stop-ra, ezért reset-failed is kell
-    systemctl --user reset-failed 'hyde-*' >/dev/null 2>&1 || true
-}
-
 # --- Kill running quickshell ---
 kill_quickshell() {
     echo "  Folyamatok leállítása..."
-    stop_hyde_units
     pkill -x quickshell 2>/dev/null || true
     pkill -x qs 2>/dev/null || true
     pkill -f "caelestia shell" 2>/dev/null || true
     pkill -x waybar 2>/dev/null || true
     pkill -x dunst 2>/dev/null || true
     pkill -x swaync 2>/dev/null || true
-    # HyDE által indított további démonok
+    # Rice-ok által indított egyéb démonok
     pkill -x hypridle 2>/dev/null || true
     pkill -x hyprsunset 2>/dev/null || true
     pkill -f "waybar.py" 2>/dev/null || true
@@ -163,10 +141,6 @@ start_quickshell() {
             eval "$env_prefix nohup quickshell -c ii >/dev/null 2>&1 &"
             log "end_4 shell indítva"
             ;;
-        "hyde")
-            echo "  HyDE: waybar használata (quickshell nem indul)"
-            log "HyDE: waybar"
-            ;;
         *)
             echo "  ⚠ Ismeretlen shell_type: '$shell_type'. Nem indítunk Quickshell-t."
             log "Ismeretlen shell_type: $shell_type"
@@ -208,11 +182,6 @@ switch_configs() {
         # End4 compat: check for 'dots/.config/hypr' etc
         if [[ ! -d "$src" && -d "$DOTFILES_DIR/$profile/dots/.config/$subdir" ]]; then
              src="$DOTFILES_DIR/$profile/dots/.config/$subdir"
-        fi
-
-        # HyDE compat: check for 'Configs/.config/hypr' etc
-        if [[ ! -d "$src" && -d "$DOTFILES_DIR/$profile/Configs/.config/$subdir" ]]; then
-             src="$DOTFILES_DIR/$profile/Configs/.config/$subdir"
         fi
 
         local should_create=false
@@ -263,7 +232,7 @@ except:
     # lefuttatott translator sem törli el a közös beállításokat.
     apply_overlay "$profile"
 
-    if [[ -d "$hypr_dir" && "$current_shell_type" != "hyde" ]]; then
+    if [[ -d "$hypr_dir" ]]; then
         echo "  Lua configok generálása/frissítése a .conf fájlokból..."
         python3 "$HOME/dotfiles/scripts/translate_hypr_lua.py" "$hypr_dir" >/dev/null 2>&1 || true
         log "Lua configok frissítve"
@@ -364,7 +333,7 @@ apply_overlay() {
         fi
     done
 
-    # If the override file is a tracked file inside a profile git repo (HyDE/end4),
+    # If the override file is a tracked file inside a profile git repo (e.g. end4),
     # hide the local change so the repo stays 'pristine' in git status.
     local real repo rel
     real=$(realpath "$target" 2>/dev/null || echo "$target")
@@ -464,16 +433,10 @@ apply_colors() {
 
 # --- Start profile services ---
 start_services() {
-    local profile="$1"
-    local shell_type
-    shell_type=$(read_meta "$profile" "shell_type")
-
-    case "$shell_type" in
-        "hyde")
-            # HyDE's hyprland config manages waybar and dunst natively via exec-once
-            echo "  HyDE szolgáltatások indulnak (hyprland kezeli)"
-            ;;
-    esac
+    # Jelenleg egyik profil sem igényel külön szolgáltatás-indítást: a
+    # quickshell-alapúakat a start_shell kezeli. A függvény megmarad, hogy a
+    # váltási folyamat szerkezete ne változzon, ha később kell ide valami.
+    :
 }
 
 # --- State management ---
@@ -495,27 +458,21 @@ get_active() {
 # ==============================================================================
 case "${1:-help}" in
     # --- SWITCH PROFILE ---
-    my-caelestia|mine|caelestia|upstream|stable|git|rolling|end4|hyde)
+    my-caelestia|mine|caelestia|upstream|stable|git|rolling|end4)
         case "$1" in
             my-caelestia|mine)
                 profile="my-caelestia"
                 desc="Saját Caelestia"
                 ;;
-            stable|caelestia|upstream)
-                profile="stable"
-                desc="Caelestia Stable (v1.6.2)"
-                ;;
-            git|rolling)
+            git|rolling|stable|caelestia|upstream)
+                # A 'stable' vonal megszűnt (két azonos tagen álló klón volt).
+                # A megszokott nevek a megmaradt upstream referenciára visznek.
                 profile="git"
-                desc="Caelestia Git Rolling (main)"
+                desc="Caelestia upstream (git main)"
                 ;;
             end4)
                 profile="end4"
                 desc="end_4 Illogical Impulse"
-                ;;
-            hyde)
-                profile="hyde"
-                desc="HyDE"
                 ;;
         esac
 

@@ -1,0 +1,130 @@
+#!/usr/bin/env bash
+#
+# shell-restart — a caelestia shell biztonságos újraindítása
+#
+# Használat:
+#   shell-restart          leállít, majd újraindít
+#   shell-restart --kill   csak leállít
+#   shell-restart --status csak jelentést ír, nem nyúl semmihez
+#
+# Miért nem elég a korábbi bind ("qs -c caelestia kill; sleep .1; caelestia
+# shell -d"): a Quickshell példány-nyilvántartása verzióváltáskor sémát vált —
+# a 0.2 -> 0.3 ugrásnál a by-pid/ helyett by-id/ lett —, ezért a régi binárissal
+# indított példányt az új "qs kill" nem találja meg. Némán "no running
+# instances"-t ír, a -n flag ("lépj ki, ha már fut példány") sem szűri ki, és a
+# régi mellé elindul egy második shell. Két párhuzamos példány pedig duplázott
+# barokat és összeakadó IPC-t okoz.
+#
+# Ez a script a folyamatlistából indul ki, nem a nyilvántartásból, ezért átéli a
+# verzióváltást, és a végén ellenőrzi, hogy pontosan egy példány fut.
+
+set -euo pipefail
+
+CONFIG=caelestia
+MODE=restart
+
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --kill)   MODE=kill; shift ;;
+        --status) MODE=status; shift ;;
+        -h|--help) sed -n '3,9p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+        *) echo "Ismeretlen opció: $1" >&2; exit 1 ;;
+    esac
+done
+
+if [[ -t 1 ]]; then
+    C_OK=$'\033[32m'; C_ERR=$'\033[31m'; C_WRN=$'\033[33m'; C_D=$'\033[2m'; C_0=$'\033[0m'
+else
+    C_OK=""; C_ERR=""; C_WRN=""; C_D=""; C_0=""
+fi
+
+# A futó példányok a /proc-ból, nem a Quickshell nyilvántartásából. pgrep -x-szel
+# szűkítünk a qs folyamatokra, majd a cmdline alapján a mi configunkra — így a
+# script saját parancssora sem tud véletlenül egyezni (pgrep -f azt is találná).
+qs_pids() {
+    local pid
+    for pid in $(pgrep -x qs 2>/dev/null || true); do
+        if tr '\0' ' ' < "/proc/$pid/cmdline" 2>/dev/null | grep -q -- "-c $CONFIG"; then
+            printf '%s\n' "$pid"
+        fi
+    done
+}
+
+read_pids() {
+    local -n out=$1
+    out=()
+    local p
+    while IFS= read -r p; do [[ -n $p ]] && out+=("$p"); done < <(qs_pids)
+}
+
+read_pids pids
+
+if [[ $MODE == status ]]; then
+    case ${#pids[@]} in
+        0) echo "  nem fut példány"; exit 1 ;;
+        1) echo "  ${C_OK}✓${C_0} egy példány fut (PID ${pids[0]})"; exit 0 ;;
+        *) echo "  ${C_ERR}✗${C_0} ${#pids[@]} példány fut egyszerre: ${pids[*]}"; exit 1 ;;
+    esac
+fi
+
+# ── Leállítás ───────────────────────────────────────────────────────────────
+if [[ ${#pids[@]} -eq 0 ]]; then
+    echo "  nem futott példány"
+else
+    echo "  leállítás (SIGTERM): ${pids[*]}"
+    kill -TERM "${pids[@]}" 2>/dev/null || true
+
+    for _ in {1..50}; do
+        read_pids pids
+        [[ ${#pids[@]} -eq 0 ]] && break
+        sleep 0.1
+    done
+
+    read_pids pids
+    if [[ ${#pids[@]} -gt 0 ]]; then
+        echo "  ${C_WRN}!${C_0} 5s után is fut, SIGKILL: ${pids[*]}"
+        kill -KILL "${pids[@]}" 2>/dev/null || true
+        sleep 0.5
+    fi
+fi
+
+[[ $MODE == kill ]] && exit 0
+
+# ── Indítás ─────────────────────────────────────────────────────────────────
+# Az aktív profil import-útja a dotswitch state fájljából, hogy a shell akkor is
+# a helyes build/qml-t lássa, ha nem a Hyprland session env-jéből indul.
+qml_state="$HOME/.local/state/dotfiles/qml_import_path"
+qml_path=""
+[[ -r $qml_state ]] && qml_path="$(<"$qml_state")"
+
+if [[ -n $qml_path ]]; then
+    echo "  ${C_D}QML_IMPORT_PATH=$qml_path${C_0}"
+    QML_IMPORT_PATH="$qml_path" caelestia shell -d >/dev/null 2>&1
+else
+    caelestia shell -d >/dev/null 2>&1
+fi
+
+# ── Ellenőrzés ──────────────────────────────────────────────────────────────
+# Ez a lényeg: a korábbi bind némán hagyott két példányt futni. Itt kiderül.
+for _ in {1..40}; do
+    read_pids pids
+    [[ ${#pids[@]} -ge 1 ]] && break
+    sleep 0.25
+done
+sleep 1
+read_pids pids
+
+case ${#pids[@]} in
+    0)
+        echo "  ${C_ERR}✗${C_0} nem indult el"
+        exit 1
+        ;;
+    1)
+        echo "  ${C_OK}✓${C_0} fut (PID ${pids[0]})"
+        ;;
+    *)
+        echo "  ${C_ERR}✗${C_0} ${#pids[@]} példány fut egyszerre: ${pids[*]}"
+        echo "  ${C_D}ez a nyilvántartás-séma váltásának tünete; shell-restart --kill, majd újra${C_0}"
+        exit 1
+        ;;
+esac

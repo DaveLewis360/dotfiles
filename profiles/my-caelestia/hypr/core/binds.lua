@@ -21,8 +21,8 @@ hl.bind(make_combo(", XF86AudioNext"), hl.dsp.global("caelestia:mediaNext"), {lo
 hl.bind(make_combo("Ctrl + Super, Minus"), hl.dsp.global("caelestia:mediaPrev"), {locked = true})
 hl.bind(make_combo(", XF86AudioPrev"), hl.dsp.global("caelestia:mediaPrev"), {locked = true})
 hl.bind(make_combo(", XF86AudioStop"), hl.dsp.global("caelestia:mediaStop"), {locked = true})
-hl.bind(make_combo("Ctrl + Super + Shift, R"), hl.dsp.exec_cmd("qs -c caelestia kill"), {release = true})
-hl.bind(make_combo("Ctrl + Super + Alt, R"), hl.dsp.exec_cmd("qs -c caelestia kill; sleep .1; caelestia shell -d"), {release = true})
+hl.bind(make_combo("Ctrl + Super + Shift, R"), hl.dsp.exec_cmd("shell-restart --kill"), {release = true})
+hl.bind(make_combo("Ctrl + Super + Alt, R"), hl.dsp.exec_cmd("shell-restart"), {release = true})
 _G["wsaction"] = "~/.config/hypr/scripts/wsaction.fish"
 hl.bind(make_combo((_G["kbGoToWs"] or "") .. ", 1"), hl.dsp.exec_cmd((_G["wsaction"] or "") .. " workspace 1"))
 hl.bind(make_combo((_G["kbGoToWs"] or "") .. ", 2"), hl.dsp.exec_cmd((_G["wsaction"] or "") .. " workspace 2"))

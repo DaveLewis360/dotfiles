@@ -368,6 +368,18 @@ def main() -> int:
     args = sys.argv[1:]
     cli_target = None
     action_impl: dict | None = None
+
+    # --cli-only: CSAK a cliToggles beolvasztása, hypr config írása nélkül.
+    # A dotswitch a caelestia JSON-okat az overlay UTÁN kezeli, és ott törli a
+    # nem hivatkozott cli.json-t — vagyis az overlay által épp létrehozott fájlt
+    # is. A toggles viszont UNIVERZÁLIS (a SUPER+D/M/T mindenhol ugyanazt
+    # nyitja), ezért utólag, külön lépésben kell beolvasztani.
+    #
+    # A kivétel a hossz-ellenőrzés ELŐTT kell, különben negyedik argumentumnak
+    # számít és usage-hibát ad.
+    cli_only = "--cli-only" in args
+    if cli_only:
+        args.remove("--cli-only")
     if "--action-impl" in args:
         i = args.index("--action-impl")
         try:
@@ -442,8 +454,9 @@ def main() -> int:
         out.extend(body.splitlines())
         out.append(end)
 
-    with open(target, "w") as f:
-        f.write("\n".join(out) + ("\n" if out else ""))
+    if not cli_only:
+        with open(target, "w") as f:
+            f.write("\n".join(out) + ("\n" if out else ""))
 
     if not strip_only and cli_target:
         note = merge_cli_toggles(data, cli_target)

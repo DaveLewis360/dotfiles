@@ -305,6 +305,18 @@ except:
         fi
     fi
 
+    # A közös cliToggles beolvasztása MOST, a fenti symlink-kezelés UTÁN: az
+    # apply_overlay korábban fut, és a fenti lépés törli a nem hivatkozott
+    # cli.json-t — vele az overlay által épp létrehozott fájlt is. A toggles
+    # univerzális (SUPER+D/M/T mindenhol ugyanazt nyitja), ezért a cli.json-nak
+    # minden profilban léteznie kell, akkor is, ha a profil nem szállít sajátot.
+    if [[ -f "$SHARED_DIR/common.json" ]]; then
+        python3 "$HOME/dotfiles/scripts/apply_overlay.py" --cli-only \
+            "$SHARED_DIR/common.json" /dev/null lua \
+            --cli-target "$CAELESTIA_CONFIG_DIR/cli.json" 2>/dev/null \
+            && echo "  ✓ közös toggles → caelestia/cli.json"
+    fi
+
     log "Configok váltva: $count db"
 }
 

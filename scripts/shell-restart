@@ -97,11 +97,32 @@ qml_state="$HOME/.local/state/dotfiles/qml_import_path"
 qml_path=""
 [[ -r $qml_state ]] && qml_path="$(<"$qml_state")"
 
-if [[ -n $qml_path ]]; then
-    echo "  ${C_D}QML_IMPORT_PATH=$qml_path${C_0}"
-    QML_IMPORT_PATH="$qml_path" caelestia shell -d >/dev/null 2>&1
+[[ -n $qml_path ]] && echo "  ${C_D}QML_IMPORT_PATH=$qml_path${C_0}"
+
+# FONTOS: saját cgroupba indítjuk, nem a hívó terminál scope-jába.
+#
+# Miért: a systemd-oomd cgroup-onként öl. Amikor a gépen elfogyott a memória,
+# kilőtte a terminál scope-ját — és mivel a shell onnan indult, azzal együtt őt
+# is, 731 másik processz társaságában. A Hyprland exec-once-a a session scope-ban
+# indítja, ezért a normál indítás nem érintett; csak a kézi újraindítás volt az.
+#
+# A systemd-run --scope új, önálló scope-ot nyit. A `caelestia shell -d`
+# daemonizál, a leszakadó gyerek a scope tagja marad, ezért a --collect nem
+# szedi el alóla. Ha nincs systemd-run, marad a közvetlen indítás.
+launch() {
+    if [[ -n $qml_path ]]; then
+        QML_IMPORT_PATH="$qml_path" "$@"
+    else
+        "$@"
+    fi
+}
+
+if command -v systemd-run >/dev/null 2>&1; then
+    launch systemd-run --user --scope --quiet --collect \
+        --unit="caelestia-shell-$$" caelestia shell -d >/dev/null 2>&1 || launch caelestia shell -d >/dev/null 2>&1
 else
-    caelestia shell -d >/dev/null 2>&1
+    echo "  ${C_WRN}!${C_0} systemd-run nincs — a shell a hívó cgroupjába kerül"
+    launch caelestia shell -d >/dev/null 2>&1
 fi
 
 # ── Ellenőrzés ──────────────────────────────────────────────────────────────

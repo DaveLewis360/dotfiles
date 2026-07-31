@@ -1,13 +1,67 @@
 {
-  "wallpaper": {
-    "postHook": ""
-  },
-  "theme": {
-    "enableTerm": false
-  },
-  "toggles": {
-  },
-  "record": {
-    "extraArgs": []
-  }
+    "wallpaper": {
+        "postHook": ""
+    },
+    "theme": {
+        "enableTerm": false
+    },
+    "toggles": {
+        "communication": {
+            "discord": {
+                "_comment": "A wrapper vesktopot (Vencord beépítve) használ, ha van; különben az official Discordot. A match mindkét osztályt fedi, hogy a váltás után se induljon második példány.",
+                "command": [
+                    "discord-vencord"
+                ],
+                "match": [
+                    {
+                        "class": "vesktop"
+                    },
+                    {
+                        "class": "equibop"
+                    },
+                    {
+                        "class": "discord"
+                    }
+                ]
+            }
+        },
+        "music": {
+            "spotify": {
+                "command": [
+                    "zen-browser",
+                    "-P",
+                    "spotifyWrapper",
+                    "--class=spotifyWrapper",
+                    "--name=spotifyWrapper",
+                    "https://open.spotify.com"
+                ],
+                "match": [
+                    {
+                        "class": "spotifyWrapper"
+                    }
+                ]
+            }
+        },
+        "sysmon": {
+            "btop": {
+                "_comment": "A ghostty érvényes GTK app-ID-t vár; a puszta 'btop'-ot csendben eldobja. Ezért kell a reverse-DNS forma.",
+                "command": [
+                    "app2unit",
+                    "--",
+                    "ghostty",
+                    "--class=com.mitchellh.ghostty.btop",
+                    "-e",
+                    "btop"
+                ],
+                "match": [
+                    {
+                        "class": "com.mitchellh.ghostty.btop"
+                    }
+                ]
+            }
+        }
+    },
+    "record": {
+        "extraArgs": []
+    }
 }

@@ -51,13 +51,25 @@ IGNORED_KEYS = ("_comment",)
 #  input blokk
 # ─────────────────────────────────────────────────────────────────────────────
 
+def lua_str(text: str) -> str:
+    r"""Lua string-literál escape-elés.
+
+    A Lua CSAK a saját escape-jeit fogadja el (\n, \t, \\, \" …). Egy regexből
+    érkező '\.' érvénytelen escape, és a Lua a TELJES fájlt visszautasítja:
+      hypr-user.lua:65: invalid escape sequence near '"...class:^(com\.'
+    Ilyenkor az összes közös beállítás elveszik, hibaüzenettel a Hyprland
+    configerrors-ában — de a bindok csendben nem működnek.
+    """
+    return text.replace("\\", "\\\\").replace('"', '\\"')
+
+
 def fmt_value(v, fmt: str) -> str:
     """Egy skalár érték a cél formátum szerint."""
     if isinstance(v, bool):
         return "true" if v else "false"
     if isinstance(v, (int, float)):
         return str(v)
-    return f'"{v}"' if fmt == "lua" else str(v)
+    return f'"{lua_str(str(v))}"' if fmt == "lua" else str(v)
 
 
 def emit(d: dict, fmt: str, indent: int) -> list[str]:
@@ -126,14 +138,13 @@ def _lua_fullscreenstate(args: str) -> str:
 
 
 def _lua_exec(args: str) -> str:
-    escaped = args.replace("\\", "\\\\").replace('"', '\\"')
-    return f'hl.dsp.exec_cmd("{escaped}")'
+    return f'hl.dsp.exec_cmd("{lua_str(args)}")'
 
 
 def _lua_global(args: str) -> str:
     # A shell-ek IPC-je: hl.dsp.global("caelestia:launcher") /
     # hl.dsp.global("quickshell:searchToggleRelease")
-    return f'hl.dsp.global("{args.strip()}")'
+    return f'hl.dsp.global("{lua_str(args.strip())}")'
 
 
 LUA_DISPATCHERS = {
@@ -201,8 +212,9 @@ def build_binds(binds: list, fmt: str) -> list[str]:
         combo = " + ".join(p.strip() for p in keys.split(",") if p.strip())
         opts = [LUA_BIND_OPTS[c] for c in flags if c in LUA_BIND_OPTS]
         opt_str = (", { " + ", ".join(opts) + " }") if opts else ""
-        lines.append(f'hl.unbind("{combo}")')
-        lines.append(f'hl.bind("{combo}", {maker(args)}{opt_str})')
+        safe = lua_str(combo)
+        lines.append(f'hl.unbind("{safe}")')
+        lines.append(f'hl.bind("{safe}", {maker(args)}{opt_str})')
 
     return lines
 
@@ -251,7 +263,7 @@ def build_windowrules(rules: list, fmt: str) -> list[str]:
         return []
 
     if fmt == "lua":
-        body = [f'        "{e}",' for e in entries]
+        body = [f'        "{lua_str(e)}",' for e in entries]
         return ["hl.config({", "    windowrule = {", *body, "    }", "})"]
     return [f"windowrule = {e}" for e in entries]
 

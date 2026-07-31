@@ -1,0 +1,16 @@
+[Unit]
+Description=Check whether upstream changed anything the caelestia fork copied
+Documentation=file:///home/dave/Reference/my-caelestia-shell/docs/ARCHITECTURE.md
+
+[Service]
+Type=oneshot
+# --quiet: csak akkor ír és értesít, ha VAN elmozdulás. Enélkül minden héten
+# jönne egy "minden rendben" üzenet, amit egy hónap után már senki nem olvas.
+ExecStart=%h/dotfiles/scripts/fork-drift --quiet
+
+# A fork-drift 1-es kóddal tér vissza, ha talált elmozdulást. Ez nem hiba,
+# hanem eredmény — enélkül a systemd minden héten failed unitot jelentene.
+SuccessExitStatus=0 1
+
+# Hálózatot használ (git fetch), ezért nem érdemes agresszív timeout.
+TimeoutStartSec=180

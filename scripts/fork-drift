@@ -165,18 +165,12 @@ if [[ $QUIET -eq 0 || $HAS_DRIFT -eq 1 ]]; then
         [[ "$N_MISSING" -gt 0 ]] && echo "  ${c_yellow}${N_MISSING} fájl ELTŰNT az upstreamből${c_reset} ${c_dim}(átnevezés vagy törlés)${c_reset}"
         echo "  ${c_green}${N_CLEAN}${c_reset} naprakész"
         echo
-        python3 - <<PY
-import json
-d = json.loads('''$DRIFT_REPORT''')
-for e in d["drifted"]:
-    print(f"    \033[1m{e['local']}\033[0m  \033[2m← {e['upstream']}\033[0m")
-    print(f"        {e['commits']} commit, +{e['ins']} -{e['del']}")
-    for line in e["log"]:
-        print(f"        \033[2m· {line}\033[0m")
-    print()
-for local, up in d["missing"]:
-    print(f"    \033[33m{local}\033[0m  \033[2m← {up} (már nincs upstreamben)\033[0m")
-PY
+        # A részletes jelentés külön Python fájlban van, és az adat argv-ben
+        # megy. Shellbe ágyazott Python-kódban a commit-üzenetek aposztrófjai és
+        # idézőjelei elkerülhetetlenül escape-hibát okoznak — és az úgy csak a
+        # JELENTÉST rontja el, miközben az észlelés már lefutott, ami a
+        # legrosszabb fajta hiba: a jelzés elveszik.
+        python3 "$HOME/dotfiles/scripts/lib/fork-drift-report.py" "$DRIFT_REPORT"
         echo "  ${c_dim}Egy fájl változásai:  fork-drift --show <fájlnév>${c_reset}"
     fi
 

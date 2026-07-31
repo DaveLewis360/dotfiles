@@ -1,0 +1,18 @@
+[Unit]
+Description=Weekly upstream drift check for the caelestia fork
+
+[Timer]
+# Hétfő reggel, de nem pontosan: a RandomizedDelaySec szétszórja, hogy ne
+# essen egybe minden más induló dologgal.
+OnCalendar=Mon 10:00
+RandomizedDelaySec=30m
+
+# Ha a gép aludt vagy ki volt kapcsolva a tervezett időpontban, a bekapcsolás
+# után fusson le. Enélkül egy hétvégén kikapcsolt gép átugorná a hetet.
+Persistent=true
+
+# Indulás után ne azonnal fusson: a hálózat és a shell felállásának adunk időt.
+OnBootSec=15min
+
+[Install]
+WantedBy=timers.target

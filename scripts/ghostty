@@ -1,0 +1,16 @@
+#!/bin/sh
+# Ghostty indító a Hyprland blur-shimmel.
+#
+# Ok: a GTK4 ext_background_effect objektuma üres blur-régióval lekapcsolja a
+# Hyprland window-blur-t (shouldBlur → m_blurRegion.empty()), ezért a Ghostty
+# mögé nem kerül blur, pedig az ablak átlátszó. A shim eltünteti a protokollt a
+# Wayland registry-ből → a Hyprland visszaállítja a blur-t.
+# Forrás: dotfiles/apps/ghostty/blur-shim.c  (fordítás: ~/.local/lib/libghostty-blur-shim.so)
+
+SHIM="$HOME/.local/lib/libghostty-blur-shim.so"
+if [ -r "$SHIM" ]; then
+    LD_PRELOAD="$SHIM${LD_PRELOAD:+:$LD_PRELOAD}"
+    export LD_PRELOAD
+fi
+
+exec /usr/bin/ghostty "$@"

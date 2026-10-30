@@ -8,6 +8,13 @@ term = xterm-256color
 # Behavior
 window-save-state = never
 window-step-resize = true
+# Single instance: az új ablakokat a már futó példány hozza létre
+# (~150 ms) a teljes hideg indulás (~1,1 s) helyett.
+gtk-single-instance = true
+
+# Manual theme reload (wallpaper change): Ghostty 1.3 does not auto-reload
+# config (no file watcher), so hit this after the scheme regenerates.
+keybind = ctrl+shift+r=reload_config
 
 # Theme
 config-file = /home/dave/.config/ghostty/current_theme.conf

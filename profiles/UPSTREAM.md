@@ -46,7 +46,7 @@ a legacy hyprlang parsert ([hyprwm/Hyprland#15539](https://github.com/hyprwm/Hyp
 
 | Profil | Amit a Hyprland betölt | A szerkesztett forrás |
 |---|---|---|
-| `my-caelestia`, `my-caelestia-bar`, `my-caelestia-next` (közös `hypr`) | `hyprland.lua` | a `.conf`; a `.lua`-t minden váltáskor a `translate_hypr_lua.py` generálja belőle (a `scheme/` kivétel, lent) |
+| `my-caelestia`, `my-caelestia-bar`, `my-caelestia-next` (közös `hypr`) | `hyprland.lua` | a `.lua` (`"hypr_source": "lua"`); a `.conf` elavult, a fordító nem fut rá; az overlay a `hardware/overlay.lua`-ba ír |
 | `git` | `hyprland.lua` | a `.lua` (Lua-natív, nincs `.conf`) |
 | `end4` | `hyprland.lua` | a `.lua` (az upstream Lua-natív) |
 
@@ -57,9 +57,14 @@ a legacy hyprlang parsert ([hyprwm/Hyprland#15539](https://github.com/hyprwm/Hyp
 - A `dotswitch` `running_hypr_format()` függvénye 0.57-től mindig `lua`-t mond
   (`d400276`). Előtte a `hyprctl keyword` próba miatt tévesen „újralépés kell”
   riasztást adott.
-- Előkészítve, de még nem élő: a `.lua` legyen a forrás a három
-  `my-caelestia*` profilban is (`agent/dotfiles-lua-source-20261030` ág, a
-  fordító ott nem fut rájuk).
+- A `"hypr_source": "lua"` profiloknál a `dotswitch` nem futtatja a fordítót.
+  A váltás előtti száraz ellenőrzés: `scripts/lua-source-dryrun [profil]`.
+- Az `apply_overlay.py` lua-kimenete az ablakszabályokat `hl.window_rule()`
+  hívásként írja. A korábbi `hl.config({ windowrule = { "..." } })` formát a
+  0.57 hiba nélkül elfogadja, de nem érvényesíti: a `windowrule` nem ismert
+  config-kulcs (`windowrule = 5` → „unknown config key”), a táblás alakra
+  pedig egy kitalált szabálynévvel is „config ok” jön. A `git` profil közös
+  ablakszabályai így eddig hatástalanok voltak.
 
 ## Archív: HyDE (2026-07-31 óta nincs, `2925bd6`)
 

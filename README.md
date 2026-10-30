@@ -35,8 +35,9 @@ Váltás után **logout/login** javasolt a teljes hatáshoz.
    symlinkeket a profilra (a `.meta.json` `configs` blokkja dönti el, melyiket)
 5. Ráteszi a közös beállításokat (`shared/common.json` → pl. `kb_layout=hu,us`)
    a profil overlay-fájljára, és beköti az `apps/` univerzális app-configjait
-6. Generálja a Hyprland `.lua` configokat a `.conf`-okból (`translate_hypr_lua.py`);
-   a `scheme/` alatti `.lua`-t nem írja felül (lásd lent)
+6. A `.conf`-forrású profiloknál generálja a Hyprland `.lua` configokat a
+   `.conf`-okból (`translate_hypr_lua.py`; a `scheme/` alatti `.lua`-t nem írja
+   felül). A `"hypr_source": "lua"` profiloknál ez kimarad (lásd lent)
 7. Beköti a `shell.json` / `cli.json`-t a `~/.config/caelestia/` alá
 8. Elindítja a shellt, újratölti a Hyprlandot, alkalmazza a színeket
 
@@ -46,14 +47,20 @@ Váltás után **logout/login** javasolt a teljes hatáshoz.
 
 A Hyprland 0.57 óta (ezen a gépen 2026-10-28 óta) csak a `hyprland.lua`-t
 tudja betölteni, a `.conf` parser kikerült belőle. A `my-caelestia*` profilok
-közös `hypr` könyvtárában ma is a `.conf` a szerkesztett forrás: a `dotswitch`
-minden váltáskor ebből generálja a `.lua`-t. **Ha `.conf`-ot szerkesztesz, a
-változás csak a következő `dotswitch` után lép életbe.**
+közös `hypr` könyvtárában ezért **a `.lua` a szerkesztett forrás**
+(`.meta.json`: `"hypr_source": "lua"`). A `dotswitch` ezekre a profilokra nem
+futtatja a `.conf` → `.lua` fordítót, a közös beállításokat pedig közvetlenül a
+`hardware/overlay.lua`-ba írja (`"overlay_format": "lua"`).
 
+- A `.conf` fájlok még megvannak, de elavultak: a Hyprland és a `dotswitch` sem
+  olvassa őket. Pár nap használat után kerülnek ki a gitből.
 - A színsémát (`hypr/scheme/current.lua`) a caelestia CLI írja háttér- vagy
-  sémaváltáskor. A fordító ezt nem írja felül.
-- A `.lua` mint forrás (a fordító kikapcsolása ezekre a profilokra) elő van
-  készítve az `agent/dotfiles-lua-source-20261030` ágon, még nem élő.
+  sémaváltáskor.
+- A fordító (`translate_hypr_lua.py`) a `hypr_source` nélküli profiloknál fut
+  tovább (pl. `end4`).
+- Váltás előtt és egy `.conf`/`.lua` módosítás után: `scripts/lua-source-dryrun`
+  (semmit nem ír; összeveti a régi és az új utat, és lefuttatja a
+  `Hyprland --verify-config`-ot).
 - Részletek és a profilonkénti táblázat:
   [`profiles/UPSTREAM.md`](profiles/UPSTREAM.md#hyprland-config-formátum-lua-vs-conf).
 
@@ -134,7 +141,8 @@ következő merge-nél automatikusan alkalmazza. Egy konfliktust elég egyszer m
 │   ├── shell-sync-upstream   fork frissítése upstreamből (visszavonhatóan)
 │   ├── shell-rebuild         a shell C++/QML pluginjeinek buildje
 │   ├── dotclean              régi mentések visszavonható kitakarítása
-│   ├── translate_hypr_lua.py .conf → .lua generálás
+│   ├── translate_hypr_lua.py .conf → .lua generálás (csak .conf-forrású profilnál)
+│   ├── lua-source-dryrun     száraz ellenőrzés: régi és új út, verify-config
 │   ├── apply_overlay.py      common.json ráolvasztása a profilra
 │   ├── update_css_vars.py    színek terminálokba és VS Code-ba
 │   └── ghostty               Ghostty indító a blur-shimmel

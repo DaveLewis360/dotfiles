@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="hu">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Rice-konfigurátor</title>
+<link rel="stylesheet" href="app.css">
+</head>
+<body>
+<header class="top">
+  <div class="brand">
+    <h1>Rice-konfigurátor</h1>
+    <span id="meta" class="meta"></span>
+  </div>
+  <div class="tools">
+    <input id="search" type="search" placeholder="Keresés: kulcs, felirat, leírás, érték  ( / )" autocomplete="off">
+    <select id="fltState" title="Jelölés szerinti szűrés">
+      <option value="">Minden jelölés</option>
+      <option value="none">Jelöletlenek</option>
+      <option value="any">Jelöltek</option>
+      <option value="keep">Tartsd</option>
+      <option value="change">Változtasd</option>
+      <option value="ignore">Nem érdekel</option>
+      <option value="comment">Megjegyzéssel</option>
+    </select>
+    <label class="chk"><input id="fltSet" type="checkbox"> csak a configban beállítottak</label>
+    <label class="chk"><input id="fltDiff" type="checkbox"> csak az alapértéktől eltérők</label>
+  </div>
+  <div class="actions">
+    <span id="stats" class="stats"></span>
+    <span id="saved" class="saved"></span>
+    <button id="btnExport" class="primary" title="Az összes jelölés és megjegyzés letöltése JSON-ban">Export JSON</button>
+    <button id="btnImport" title="Korábbi export visszatöltése">Import</button>
+    <input id="fileImport" type="file" accept="application/json,.json" hidden>
+    <button id="btnReset" class="danger" title="Minden jelölés törlése ebből a böngészőből">Törlés</button>
+  </div>
+</header>
+<div class="layout">
+  <nav id="nav" class="nav"></nav>
+  <main id="main" class="main">
+    <noscript>A laphoz JavaScript kell.</noscript>
+  </main>
+</div>
+<template id="help">
+  <details class="help" open>
+    <summary>Hogyan használd</summary>
+    <ul>
+      <li>Minden paraméternél: <b>Tartsd</b> (maradjon így), <b>Változtasd</b> (írd be a javasolt értéket), <b>Nem érdekel</b>. Ugyanarra a gombra kattintva a jelölés törlődik.</li>
+      <li>A <b>Megjegyzés</b> gombbal bármihez írhatsz szöveget, jelölés nélkül is.</li>
+      <li>Az <span class="badge preset">előjelölve</span> tételeket abból jelöltük, amit már tudunk rólad (a <code>presets.json</code>-ból). Bármelyiket átírhatod.</li>
+      <li>A jelölések a böngészőben automatikusan mentődnek. A végén az <b>Export JSON</b> gomb letölti az egészet egy fájlba; ezt kell visszaadni.</li>
+      <li>Előnézet: színminták, betűminták, és az animáció-görbék. A görbe fölé víve az egeret a pötty a görbe szerint mozog.</li>
+      <li><kbd>/</kbd> a keresőre ugrik. A bal oldali számok: jelölt / összes.</li>
+    </ul>
+    <label class="notes">Általános megjegyzés (az exportba kerül):
+      <textarea id="globalNotes" rows="3" placeholder="Bármi, ami nem egy paraméterhez tartozik…"></textarea>
+    </label>
+  </details>
+</template>
+<script src="data/catalog.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

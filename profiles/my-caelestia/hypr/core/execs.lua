@@ -10,7 +10,7 @@ hl.on("hyprland.start", function() hl.exec_cmd("/usr/lib/geoclue-2.0/demos/agent
 hl.on("hyprland.start", function() hl.exec_cmd("gammastep") end)
 hl.on("hyprland.start", function() hl.exec_cmd("mpris-proxy") end)
 hl.on("hyprland.start", function() hl.exec_cmd("caelestia resizer -d") end)
-hl.on("hyprland.start", function() hl.exec_cmd("caelestia shell -d") end)
+hl.on("hyprland.start", function() hl.exec_cmd("~/.local/bin/shell-restart --start") end)
 hl.on("hyprland.start", function() hl.exec_cmd("python3 ~/dotfiles/scripts/update_css_vars.py") end)
 hl.on("hyprland.start", function() hl.exec_cmd("~/.config/caelestia/update_kdeglobals.sh") end)
 hl.on("hyprland.start", function() hl.exec_cmd("/usr/lib/xdg-desktop-portal-hyprland") end)

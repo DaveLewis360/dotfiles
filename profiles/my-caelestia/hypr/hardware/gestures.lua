@@ -1,6 +1,6 @@
 hl.on("hyprland.start", function() hl.exec_cmd("hyprctl keyword gesture \"4, horizontal, workspace\"") end)
 hl.on("hyprland.start", function() hl.exec_cmd("hyprctl keyword gesture \"3, up, special, special\"") end)
-hl.on("hyprland.start", function() hl.exec_cmd("hyprctl keyword gesture \"3, down, dispatcher, exec, caelestia toggle specialws\"") end)
+hl.on("hyprland.start", function() hl.exec_cmd("hyprctl keyword gesture \"3, down, dispatcher, exec, caelestia toggle special\"") end)
 hl.on("hyprland.start", function() hl.exec_cmd("hyprctl keyword gesture \"4, down, dispatcher, exec, systemctl suspend-then-hibernate\"") end)
 hl.config({
     gestures = {

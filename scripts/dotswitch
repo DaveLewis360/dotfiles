@@ -421,14 +421,37 @@ profile_hypr_format() {
     fi
 }
 
-# Amit a FUTÓ Hyprland használ: a configerrors elárulja, ha .lua-t keres,
-# egyébként a betöltött fájl létezéséből következtetünk.
+# A futó Hyprland verziója legalább $1 (pl. 0.57)? A 'hyprctl version -j' csak
+# olvas. Ha a verzió nem állapítható meg, hamis — ilyenkor a régi módszer dönt.
+# A timeout azért kell, mert a hyprctl a socketre vár, és egy épp nem válaszoló
+# Hyprland mellett a dotswitch végén itt akadna el.
+hypr_version_at_least() {
+    local want="$1" have
+    have=$(timeout 3 hyprctl version -j </dev/null 2>/dev/null | python3 -c '
+import json, sys
+d = json.load(sys.stdin)
+v = (d.get("version") or d.get("tag") or "").lstrip("v")
+print(v)
+' 2>/dev/null) || return 1
+    [[ "$have" =~ ^[0-9]+(\.[0-9]+)*$ ]] || return 1
+    [[ "$(printf '%s\n%s\n' "$want" "$have" | sort -V | head -n1)" == "$want" ]]
+}
+
+# Amit a FUTÓ Hyprland használ.
 running_hypr_format() {
     if ! hyprctl instances >/dev/null 2>&1; then
         echo "?"
         return
     fi
-    # Ha a Lua parser aktív, a 'keyword' hibát ad non-legacy parser miatt
+    # A Hyprland 0.57 kivette a legacy .conf parsert (hyprwm/Hyprland#15539),
+    # és a 'hyprctl keyword' parancs sincs meg benne. 0.57-től a futó config
+    # ezért mindig .lua; a lenti keyword-próba ott téves 'conf'-ot adna.
+    if hypr_version_at_least 0.57; then
+        echo "lua"
+        return
+    fi
+    # Régebbi Hyprland: ha a Lua parser aktív, a 'keyword' hibát ad non-legacy
+    # parser miatt
     if hyprctl keyword general:border_size "$(hyprctl getoption general:border_size -j 2>/dev/null | python3 -c 'import json,sys; print(json.load(sys.stdin)["int"])' 2>/dev/null || echo 1)" 2>&1 | grep -q "non-legacy"; then
         echo "lua"
     else

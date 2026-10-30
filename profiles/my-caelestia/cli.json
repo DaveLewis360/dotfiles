@@ -8,36 +8,30 @@
     "toggles": {
         "communication": {
             "discord": {
-                "_comment": "A wrapper vesktopot (Vencord beépítve) használ, ha van; különben az official Discordot. A match mindkét osztályt fedi, hogy a váltás után se induljon második példány.",
+                "_comment": "A zen-app-runtime Discord appja (zen-app-discord). Ha nem fut, elindítja; ha fut, a SUPER+D előhozza vagy elrejti.",
                 "command": [
-                    "discord-vencord"
+                    "zen-app",
+                    "run",
+                    "discord"
                 ],
                 "match": [
                     {
-                        "class": "vesktop"
-                    },
-                    {
-                        "class": "equibop"
-                    },
-                    {
-                        "class": "discord"
+                        "class": "zen-app-discord"
                     }
                 ]
             }
         },
         "music": {
             "spotify": {
+                "_comment": "A zen-app-runtime Spotify appja (zen-app-spotify). Ha nem fut, elindítja; ha fut, a SUPER+M előhozza vagy elrejti.",
                 "command": [
-                    "zen-browser",
-                    "-P",
-                    "spotifyWrapper",
-                    "--class=spotifyWrapper",
-                    "--name=spotifyWrapper",
-                    "https://open.spotify.com"
+                    "zen-app",
+                    "run",
+                    "spotify"
                 ],
                 "match": [
                     {
-                        "class": "spotifyWrapper"
+                        "class": "zen-app-spotify"
                     }
                 ]
             }

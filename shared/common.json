@@ -2,11 +2,11 @@
   "_comment": "KÖZÖS, rice-független beállítások. A dotswitch minden profilra ráteszi váltáskor, a profil natív formátumában (lua/conf). Itt egy helyen szerkeszd — minden rice-ban ugyanaz lesz.",
   "input": {
     "_comment": "Skalárok + egy szint mély alblokkok (pl. touchpad). Az üres string értékű kulcsokat az overlay kihagyja.",
-    "kb_layout": "hu",
+    "kb_layout": "hu,us",
     "kb_variant": "",
     "kb_options": "",
     "numlock_by_default": true,
-    "natural_scroll": true,
+    "natural_scroll": false,
     "touchpad": {
       "natural_scroll": true
     }
@@ -32,11 +32,11 @@
       "args": "0 2"
     },
     {
-      "_comment": "A caelestia CLI toggle-jai tisztán Hyprland IPC-t és a cliToggles configot használják — nincs shell-függőségük, ezért minden rice-ban működnek. A hozzá tartozó ablakszabályok a windowrules szekcióban vannak.",
+      "_comment": "A caelestia CLI toggle-jai tisztán Hyprland IPC-t és a cliToggles configot használják — nincs shell-függőségük, ezért minden rice-ban működnek. A hozzá tartozó ablakszabályok a windowrules szekcióban vannak. Az S direktben a névtelen 'special' ws-t nyitja (mint D/M/T a sajátját); a 'toggle specialws' NEM jó ide, mert az az éppen látható specialt kapcsolja ki, így másik előtérben lévő ws-nél két nyomás kellene.",
       "description": "Névtelen special workspace",
       "keys": "SUPER, S",
       "dispatcher": "exec",
-      "args": "caelestia toggle specialws"
+      "args": "caelestia toggle special"
     },
     {
       "description": "Zene (Spotify) special workspace",
@@ -76,13 +76,13 @@
       "_comment": "Ezek nélkül a SUPER+D/M/T egy ÜRES special workspace-t nyitna abban a rice-ban, ami nem ismeri ezeket a szabályokat.",
       "rule": "workspace special:communication",
       "match": {
-        "class": "^(discord|vesktop|equibop|WebCord)$"
+        "class": "^(zen-app-discord|discord|equibop|WebCord)$"
       }
     },
     {
       "rule": "workspace special:music",
       "match": {
-        "class": "^(spotifyWrapper|spotify|Spotify)$"
+        "class": "^(zen-app-spotify|spotifyWrapper|spotify|Spotify)$"
       }
     },
     {
@@ -96,36 +96,30 @@
     "_comment": "A 'caelestia toggle <név>' definíciói: melyik app tartozik melyik special workspace-hez. Az overlay beolvasztja a ~/.config/caelestia/cli.json-ba, hogy MINDEN profilban meglegyen — eddig csak a my-caelestia-ban volt, a git-ben egyáltalán nem.",
     "communication": {
       "discord": {
-        "_comment": "A wrapper vesktopot (Vencord beépítve) használ, ha van; különben az official Discordot. A match mindkét osztályt fedi, hogy a váltás után se induljon második példány.",
+        "_comment": "A zen-app-runtime Discord appja (zen-app-discord). Ha nem fut, elindítja; ha fut, a SUPER+D előhozza vagy elrejti.",
         "command": [
-          "discord-vencord"
+          "zen-app",
+          "run",
+          "discord"
         ],
         "match": [
           {
-            "class": "vesktop"
-          },
-          {
-            "class": "equibop"
-          },
-          {
-            "class": "discord"
+            "class": "zen-app-discord"
           }
         ]
       }
     },
     "music": {
       "spotify": {
+        "_comment": "A zen-app-runtime Spotify appja (zen-app-spotify). Ha nem fut, elindítja; ha fut, a SUPER+M előhozza vagy elrejti.",
         "command": [
-          "zen-browser",
-          "-P",
-          "spotifyWrapper",
-          "--class=spotifyWrapper",
-          "--name=spotifyWrapper",
-          "https://open.spotify.com"
+          "zen-app",
+          "run",
+          "spotify"
         ],
         "match": [
           {
-            "class": "spotifyWrapper"
+            "class": "zen-app-spotify"
           }
         ]
       }

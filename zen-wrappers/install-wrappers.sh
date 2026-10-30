@@ -104,11 +104,11 @@ EOF
     chmod +x "$HOME/.local/share/applications/$app_name-wrapper.desktop"
 }
 
-# Mindkét app létrehozása
+# Csak a Spotify wrapper: a Messenger a zen-app-runtime appja lett
+# (zen-app run messenger), a régi Messenger wrapper törölve.
 create_simple_wrapper "spotify" "https://open.spotify.com"
-create_simple_wrapper "messenger" "https://www.messenger.com"
 
 # Takarítás
 rm -f "$HOME/.dotfiles/zen-wrappers/launcher.sh"
 
-echo "Kész! Spotify és Messenger wrapperek telepítve (egyszerű, stabil mód)."
+echo "Kész! Spotify wrapper telepítve (egyszerű, stabil mód)."

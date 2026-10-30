@@ -1,31 +1,73 @@
-# Beágyazott upstream klónok
+# Beágyazott upstream klónok és külső shell-források
 
-Ezek a könyvtárak `.gitignore`-ban vannak, mert saját git történetük van.
-Innen állíthatók vissza. Frissítve: 2026-07-29 12:55
+Frissítve: 2026-10-30
 
-| Könyvtár | Upstream | Branch | Rögzített commit | Dátum |
+## Beágyazott klónok (a `profiles/` alatt, `.gitignore`-ban)
+
+Ezeknek saját git történetük van, ezért nincsenek a repóban. Innen állíthatók
+vissza. A táblában a 2026-10-30-i HEAD áll.
+
+| Könyvtár | Upstream | Branch | Commit | Dátum |
 |---|---|---|---|---|
-| `profiles/stable` | https://github.com/caelestia-dots/caelestia.git | main | `2e5598c627734cc87089d5ea570e80db558a04f7` | 2026-06-30 |
-| `profiles/end4` | https://github.com/end-4/dots-hyprland.git | main | `c04b0bbc8143a2b2166c1f699f7583cb28ff78fe` | 2026-06-14 |
-| `profiles/hyde` | https://github.com/HyDE-Project/HyDE.git | master | `a51460a7b1a822ee7194318b60a38850f711b923` | 2026-05-26 |
-| `profiles/my-caelestia/shell` | https://github.com/caelestia-dots/caelestia.git | main | `fb9fa1ccbb5bba97dc25ac2402704b7bc5508dcc` | 2026-06-12 |
-
-## Visszaállítás
+| `profiles/end4` | https://github.com/end-4/dots-hyprland.git | main | `2f0c8bf42b803f4d597572f2a014d4e78d7d9f26` | 2026-09-14 |
 
 ```bash
-# Példa (profiles/stable):
-git clone https://github.com/caelestia-dots/caelestia.git ~/dotfiles/profiles/stable
-git -C ~/dotfiles/profiles/stable checkout <commit a táblából>
+git clone https://github.com/end-4/dots-hyprland.git ~/dotfiles/profiles/end4
+git -C ~/dotfiles/profiles/end4 checkout <commit a táblából>
 ```
 
-## Megjegyzés a `caelestia-upstream` symlinkről
+Ami már nincs meg (a `2925bd6`, 2026-07-31 óta; a mentések a
+`~/.local/share/dotfiles-trash` alatt, `dotclean --restore`):
 
-A `profiles/caelestia-upstream` egy symlink a `stable`-re, ezért a
-`dotswitch list` kétszer mutatja ugyanazt a profilt. A symlink követve van,
-de a `dotswitch` `stable` néven kezeli.
+| Volt | Mi lett vele |
+|---|---|
+| `profiles/stable` | törölve; ugyanazon a v2.2.0 tagen állt, mint a `git` vonal. A `dotswitch stable/caelestia/upstream` a `git` profilra visz |
+| `profiles/caelestia-upstream` | a `stable`-re mutató symlink volt, törölve |
+| `profiles/hyde` | a HyDE teljesen kikerült (lent archívként a régi leírás) |
+| `profiles/my-caelestia/shell` | már nincs ilyen könyvtár; a saját fork a `~/Reference` alatt van (lent) |
 
+## Külső Quickshell-források (`~/Reference`, nem a repó része)
 
-## A `hyde` profil extra lépései
+A profil `.meta.json`-ja (`quickshell_source`, `qml_import_path`) hivatkozik
+rájuk. Mindegyiknek saját repója van; a `build/qml` a `shell-rebuild` kimenete.
+
+| Profil | Könyvtár | Remote | Branch (2026-10-30) |
+|---|---|---|---|
+| `my-caelestia` | `~/Reference/my-caelestia-shell` | `DaveLewis360/shell` | `main` |
+| `my-caelestia-bar` | `~/Reference/my-caelestia-shell-bar` | `DaveLewis360/shell` | `feat/chat-sidebar` (a `bar-toggle`-re épül) |
+| `my-caelestia-next` | `~/Reference/my-caelestia-shell-next` | `DaveLewis360/shell` | `next` (BROKEN) |
+| `git` | `~/Reference/caelestia-shell-git` | `caelestia-dots/shell` | `main` |
+
+## Hyprland config-formátum: `.lua` vs `.conf`
+
+**A Hyprland 0.57 óta csak `.lua` configot tud betölteni.** A 0.57.0 kivette
+a legacy hyprlang parsert ([hyprwm/Hyprland#15539](https://github.com/hyprwm/Hyprland/pull/15539)),
+és vele a `hyprctl keyword` parancsot is. Ezen a gépen 2026-10-28 óta 0.57.0 fut.
+
+| Profil | Amit a Hyprland betölt | A szerkesztett forrás |
+|---|---|---|
+| `my-caelestia`, `my-caelestia-bar`, `my-caelestia-next` (közös `hypr`) | `hyprland.lua` | a `.conf`; a `.lua`-t minden váltáskor a `translate_hypr_lua.py` generálja belőle (a `scheme/` kivétel, lent) |
+| `git` | `hyprland.lua` | a `.lua` (Lua-natív, nincs `.conf`) |
+| `end4` | `hyprland.lua` | a `.lua` (az upstream Lua-natív) |
+
+- A `scheme/current.lua`-t a caelestia CLI írja (háttér- vagy sémaváltáskor).
+  A fordító a `scheme/` alatti `.lua`-t ezért nem írja felül, csak akkor
+  generálja, ha még nincs meg (`5a02521`). Előtte minden `dotswitch` a júniusi
+  `scheme/current.conf` színeit írta vissza.
+- A `dotswitch` `running_hypr_format()` függvénye 0.57-től mindig `lua`-t mond
+  (`d400276`). Előtte a `hyprctl keyword` próba miatt tévesen „újralépés kell”
+  riasztást adott.
+- Előkészítve, de még nem élő: a `.lua` legyen a forrás a három
+  `my-caelestia*` profilban is (`agent/dotfiles-lua-source-20261030` ág, a
+  fordító ott nem fut rájuk).
+
+## Archív: HyDE (2026-07-31 óta nincs, `2925bd6`)
+
+A lenti leírás a régi `hyde` profilé. Csak arra az esetre maradt meg, ha a
+HyDE-t valaha újra be kellene hozni. A Hyprland 0.57 a HyDE `.conf`-alapú
+configját már nem tudná betölteni.
+
+### A `hyde` profil extra lépései
 
 A HyDE nem csak configokból áll: van futásidejű adata és letöltött témái is.
 Ha a `profiles/hyde` klónt újra kell hozni, ezek is kellenek:
@@ -51,7 +93,7 @@ az upstreamé): `git -C ~/dotfiles checkout -- profiles/hyde/.meta.json`
 — illetve mivel a `profiles/hyde` gitignore-olt, a `.meta.json` sem követett,
 ezért a tartalmát a `profiles/UPSTREAM.md` mellett érdemes külön megőrizni.
 
-### Amitől a HyDE nem indul el
+#### Amitől a HyDE nem indul el
 
 Két hiba, ami korábban működésképtelenné tette:
 
@@ -69,7 +111,7 @@ Két hiba, ami korábban működésképtelenné tette:
    `hyde.bak-dotswitch-*` mentésben ragadt, a profil `hyde` könyvtárában
    nem volt `themes/`, így a téma-rendszernek nem volt mit alkalmaznia.
 
-### Visszaváltás a HyDE-ról
+#### Visszaváltás a HyDE-ról
 
 A HyDE a démonjait **systemd user unitokként** indítja
 (`hyde-<XDG_SESSION_DESKTOP>-<név>.service` / `.scope`), ezért puszta
@@ -77,55 +119,11 @@ A HyDE a démonjait **systemd user unitokként** indítja
 őket profilváltáskor.
 
 
-## Hyprland config-formátum: `.lua` vs `.conf`
+### A HyDE profilra nem futhatott a Lua-generátor
 
-| Profil | Formátum | Miért |
-|---|---|---|
-| `my-caelestia` | `.lua` | a caelestia v2 Lua configot használ |
-| `stable` | `.lua` | ugyanaz |
-| `git` | `.lua` | ugyanaz |
-| `end4` | `.lua` | az end-4 dots natívan Lua-alapú |
-| **`hyde`** | **`.conf`** | a HyDE hyprlang-alapú, és a saját eszközei (`hyq`, `hyde-config`, `theme.switch.sh`) `.conf`-ot olvasnak/írnak |
-
-**A Hyprland INDULÁSKOR választ parsert:** ha van `hyprland.lua`, azt tölti be
-(Lua parser), különben `hyprland.conf`-ot (hyprlang). Menet közben **nem tud
-váltani** a kettő között — a `hyprctl keyword` ilyenkor ezt mondja:
-
-```
-keyword can't work with non-legacy parsers. Use eval.
-```
-
-Ezért a `hyde` profilra (vagy onnan vissza) váltás **újralépést igényel a
-sessionbe**. A `dotswitch` ezt észleli (`check_hypr_format`) és kiírja.
-A symlinkek azonnal a helyükre kerülnek, csak a Hyprland config lép
-érvénybe később.
-
-### FONTOS: a HyDE profilra soha ne fusson a Lua-generátor
-
-A `scripts/translate_hypr_lua.py` `.conf`-ból `.lua`-t generál. Ha ez lefut a
-`hyde` profilra, a Hyprland onnantól a generált `hyprland.lua`-t tölti be a
-HyDE `hyprland.conf`-ja HELYETT — és mivel a generátor nem kezeli a HyDE
-`bindd` (leírásos bind) szintaxisát, **114 hibás keybind** keletkezik, a HyDE
-core configja (waybar, env, téma) pedig egyáltalán nem töltődik be.
-
-Pontosan ez tette használhatatlanná a HyDE profilt korábban: 48 generált
-`.lua` fájl volt a `Configs/.config/hypr` alatt, `hyprctl configerrors` 118
-hibát mutatott.
-
-A `dotswitch` már védve van ellene:
-
-```bash
-if [[ -d "$hypr_dir" && "$current_shell_type" != "hyde" ]]; then
-    python3 .../translate_hypr_lua.py "$hypr_dir"
-fi
-```
-
-Ha mégis megjelennének, így lehet kitakarítani:
-
-```bash
-find ~/dotfiles/profiles/hyde/Configs/.config/hypr -name '*.lua' -delete
-hyprctl reload
-```
+A `translate_hypr_lua.py` nem kezelte a HyDE `bindd` szintaxisát: egy futás
+48 generált `.lua`-t és 118 config-hibát hagyott maga után. A `dotswitch`
+ezért a HyDE-ra nem futtatta. A guard a HyDE-val együtt kikerült.
 
 ### A HyDE upstream `/home/khing` hibája
 

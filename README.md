@@ -1,9 +1,10 @@
 # dotfiles — Hyprland / Quickshell rice-rendszer
 
 Több teljes desktop-környezet ("rice") egy helyen, köztük egy paranccsal váltva.
-Minden változtatás verziókövetett, tehát visszavonható.
+A saját tartalom verziókövetett, tehát visszavonható. A generált fájlok
+(színséma, overlay, terminál-téma) nem, ezek listája a `.gitignore`-ban van.
 
-Frissítve: 2026-07-29
+Frissítve: 2026-10-30
 
 ---
 
@@ -25,17 +26,36 @@ Váltás után **logout/login** javasolt a teljes hatáshoz.
 
 ### Mit tesz egy váltás
 
+0. BROKEN-ként jelölt profilnál (`.meta.json` `"status": "broken"`) előbb
+   megerősítést kér; `--force`-szal kérdés nélkül vált
 1. Leállítja a futó shellt (quickshell / qs / caelestia shell / waybar / dunst / swaync)
 2. Törli a QML cache-t (`~/.cache/quickshell/`)
 3. Beállítja a `QML_IMPORT_PATH`-ot a profil `.meta.json`-ja szerint
 4. Átirányítja a `~/.config/{hypr,fish,ghostty,foot,kitty,waybar,dunst,rofi,swaync}`
    symlinkeket a profilra (a `.meta.json` `configs` blokkja dönti el, melyiket)
-5. Generálja a Hyprland `.lua` configokat a `.conf`-okból (`translate_hypr_lua.py`)
-6. Beköti a `shell.json` / `cli.json`-t a `~/.config/caelestia/` alá
-7. Ráteszi a közös beállításokat (`shared/common.json` → pl. `kb_layout=hu`)
+5. Ráteszi a közös beállításokat (`shared/common.json` → pl. `kb_layout=hu,us`)
+   a profil overlay-fájljára, és beköti az `apps/` univerzális app-configjait
+6. Generálja a Hyprland `.lua` configokat a `.conf`-okból (`translate_hypr_lua.py`);
+   a `scheme/` alatti `.lua`-t nem írja felül (lásd lent)
+7. Beköti a `shell.json` / `cli.json`-t a `~/.config/caelestia/` alá
 8. Elindítja a shellt, újratölti a Hyprlandot, alkalmazza a színeket
 
 Állapot: `~/.local/state/dotfiles/{active_profile,qml_import_path,switch.log}`
+
+### Hyprland 0.57: `.lua` és `.conf`
+
+A Hyprland 0.57 óta (ezen a gépen 2026-10-28 óta) csak a `hyprland.lua`-t
+tudja betölteni, a `.conf` parser kikerült belőle. A `my-caelestia*` profilok
+közös `hypr` könyvtárában ma is a `.conf` a szerkesztett forrás: a `dotswitch`
+minden váltáskor ebből generálja a `.lua`-t. **Ha `.conf`-ot szerkesztesz, a
+változás csak a következő `dotswitch` után lép életbe.**
+
+- A színsémát (`hypr/scheme/current.lua`) a caelestia CLI írja háttér- vagy
+  sémaváltáskor. A fordító ezt nem írja felül.
+- A `.lua` mint forrás (a fordító kikapcsolása ezekre a profilokra) elő van
+  készítve az `agent/dotfiles-lua-source-20261030` ágon, még nem élő.
+- Részletek és a profilonkénti táblázat:
+  [`profiles/UPSTREAM.md`](profiles/UPSTREAM.md#hyprland-config-formátum-lua-vs-conf).
 
 ---
 
@@ -44,7 +64,7 @@ Váltás után **logout/login** javasolt a teljes hatáshoz.
 | Profil | Mi ez | Quickshell forrás |
 |---|---|---|
 | **`my-caelestia`** | **Saját fork** — horizontális bar, MiniDash, videó wallpaper | `~/Reference/my-caelestia-shell` |
-| `my-caelestia-bar` | Upstream Caelestia + egy kapcsoló: felső vagy bal bar (Nexus → Panels → Taskbar → Position, vagy `barmode`). A hypr/fish/terminál configok symlinkek a `my-caelestia`-ra, saját csak a `shell.json` | `~/Reference/my-caelestia-shell-bar` (branch `bar-toggle`) |
+| `my-caelestia-bar` | **Ez az aktív (2026-10-30).** Upstream Caelestia + egy kapcsoló: felső vagy bal bar (Nexus → Panels → Taskbar → Position, vagy `barmode`). A hypr/fish/terminál configok symlinkek a `my-caelestia`-ra, saját csak a `shell.json` | `~/Reference/my-caelestia-shell-bar` (a `bar-toggle` ágra épül) |
 | `my-caelestia-next` | **BROKEN.** Ugyanez újraépítve a v2.5.0-ra (patch stack, natív `fork` config). A hypr/fish/terminál configok symlinkek a `my-caelestia`-ra, saját csak a `shell.json` | `~/Reference/my-caelestia-shell-next` (branch `next`) |
 | `git` | Caelestia upstream (git main) — összehasonlítási alap | `~/Reference/caelestia-shell-git` |
 | `end4` | end-4/dots-hyprland | `profiles/end4/dots/.config/quickshell/ii` |
@@ -109,13 +129,18 @@ következő merge-nél automatikusan alkalmazza. Egy konfliktust elég egyszer m
 │   └── gitignore, vimrc, Xresources, irbrc, gemrc
 ├── scripts/
 │   ├── dotswitch             profilváltás
+│   ├── barmode               bar felül vagy balra (a profil .meta.json barmode mezője szerint)
+│   ├── shell-restart         a shell újraindítása / --start: indítás, ha nem fut
 │   ├── shell-sync-upstream   fork frissítése upstreamből (visszavonhatóan)
 │   ├── shell-rebuild         a shell C++/QML pluginjeinek buildje
 │   ├── dotclean              régi mentések visszavonható kitakarítása
 │   ├── translate_hypr_lua.py .conf → .lua generálás
 │   ├── apply_overlay.py      common.json ráolvasztása a profilra
-│   └── update_css_vars.py    színek terminálokba
-├── apps/ghostty/
+│   ├── update_css_vars.py    színek terminálokba és VS Code-ba
+│   └── ghostty               Ghostty indító a blur-shimmel
+├── apps/                 rice-független app-configok (minden profilban ugyanaz)
+│   ├── btop/btop.conf
+│   └── ghostty/          config + blur-shim.c
 └── zen-wrappers/
 ```
 
@@ -129,6 +154,7 @@ Nincs btrfs/snapper ezen a gépen (ext4), ezért **a git a visszaállítás eszk
 |---|---|
 | Bármely dotfiles-változtatás | `git -C ~/dotfiles log` → `git revert <commit>` |
 | Kiinduló állapot (2026-07-29) | `git -C ~/dotfiles checkout baseline-20260729` |
+| A 07-31 és 10-29 közötti, addig commitolatlan munka | a `wip/pre-migration-20261025` ág (7 tematikus commit, a GitHubon is) |
 | Fork merge visszavonása | `shell-sync-upstream --undo` |
 | Fork korábbi állapota | `shell-sync-upstream --list` → `git reset --hard refs/backup/<név>` |
 | Archivált fork-branchek | `shell-sync-upstream --list` → `git branch <név> refs/backup/archive/<név>` |

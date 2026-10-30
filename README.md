@@ -10,7 +10,9 @@ Frissítve: 2026-07-29
 ## Váltás a rendszerek között
 
 ```bash
-dotswitch mine       # Saját Caelestia fork      ← ez a fejlesztendő
+dotswitch mine       # Saját Caelestia fork      ← a jelenlegi, megszokott
+dotswitch bar        # Upstream Caelestia + egyetlen kapcsoló: felső vagy bal bar
+dotswitch next       # BROKEN — kísérleti újraépítés, csak megerősítéssel (--force)
 dotswitch git        # Caelestia upstream (git main)
 dotswitch end4       # end_4 Illogical Impulse
 
@@ -42,6 +44,8 @@ Váltás után **logout/login** javasolt a teljes hatáshoz.
 | Profil | Mi ez | Quickshell forrás |
 |---|---|---|
 | **`my-caelestia`** | **Saját fork** — horizontális bar, MiniDash, videó wallpaper | `~/Reference/my-caelestia-shell` |
+| `my-caelestia-bar` | Upstream Caelestia + egy kapcsoló: felső vagy bal bar (Nexus → Panels → Taskbar → Position, vagy `barmode`). A hypr/fish/terminál configok symlinkek a `my-caelestia`-ra, saját csak a `shell.json` | `~/Reference/my-caelestia-shell-bar` (branch `bar-toggle`) |
+| `my-caelestia-next` | **BROKEN.** Ugyanez újraépítve a v2.5.0-ra (patch stack, natív `fork` config). A hypr/fish/terminál configok symlinkek a `my-caelestia`-ra, saját csak a `shell.json` | `~/Reference/my-caelestia-shell-next` (branch `next`) |
 | `git` | Caelestia upstream (git main) — összehasonlítási alap | `~/Reference/caelestia-shell-git` |
 | `end4` | end-4/dots-hyprland | `profiles/end4/dots/.config/quickshell/ii` |
 
@@ -93,6 +97,8 @@ következő merge-nél automatikusan alkalmazza. Egy konfliktust elég egyszer m
 ~/dotfiles/
 ├── profiles/
 │   ├── my-caelestia/     SAJÁT — hypr, fish, foot, ghostty, shell.json, cli.json
+│   ├── my-caelestia-bar/ upstream + bar-kapcsoló: saját shell.json, a többi symlink
+│   ├── my-caelestia-next/ BROKEN — kísérleti újraépítés
 │   ├── git/              csak configok, a shellt a Reference-ből veszi
 │   ├── end4/             upstream klón (gitignore)
 │   └── UPSTREAM.md       a klónok manifestje commit SHA-kkal

@@ -3,6 +3,9 @@
 # barmode — váltás a vízszintes (fork) és a vertikális (upstream) bar között
 # ==============================================================================
 # A shell élőben újratölti a beállítást, nincs szükség újraindításra.
+# Hogy melyik fájl melyik kulcsa tárolja, az aktív profil .meta.json-jának
+# "barmode" mezője mondja meg ({"file": ..., "key": "a.b.c"}); ha nincs, a régi
+# fork extras.json-ja (bar.horizontal).
 #
 # Használat:
 #   barmode              az aktuális mód kiírása
@@ -14,13 +17,29 @@
 set -euo pipefail
 
 CONFIG="${XDG_CONFIG_HOME:-$HOME/.config}/caelestia/extras.json"
+KEY="bar.horizontal"
+
+active="$(cat "$HOME/.local/state/dotfiles/active_profile" 2>/dev/null || true)"
+meta="$HOME/dotfiles/profiles/$active/.meta.json"
+if [[ -n "$active" && -f "$meta" ]]; then
+    spec="$(python3 -c '
+import json, sys
+b = json.load(open(sys.argv[1])).get("barmode") or {}
+if b.get("file") and b.get("key"):
+    print(b["file"], b["key"])
+' "$meta" 2>/dev/null || true)"
+    if [[ -n "$spec" ]]; then
+        CONFIG="$HOME/${spec% *}"
+        KEY="${spec##* }"
+    fi
+fi
 
 c_reset=$'\033[0m'; c_bold=$'\033[1m'; c_dim=$'\033[2m'
 c_green=$'\033[32m'; c_yellow=$'\033[33m'; c_cyan=$'\033[36m'
 
 if [[ ! -f "$CONFIG" ]]; then
     mkdir -p "$(dirname "$CONFIG")"
-    printf '{\n    "bar": {\n        "horizontal": true\n    }\n}\n' > "$CONFIG"
+    printf '{}\n' > "$CONFIG"
     echo "  ${c_dim}létrehozva: $CONFIG${c_reset}"
 fi
 
@@ -28,27 +47,34 @@ read_mode() {
     python3 -c '
 import json, sys
 try:
-    with open(sys.argv[1]) as f:
-        print("h" if json.load(f).get("bar", {}).get("horizontal", False) else "v")
+    node = json.load(open(sys.argv[1]))
+    for part in sys.argv[2].split("."):
+        node = node.get(part, {})
+    print("h" if node is True else "v")
 except Exception:
     print("v")
-' "$CONFIG"
+' "$CONFIG" "$KEY"
 }
 
 write_mode() {
     python3 -c '
-import json, sys
-path, want = sys.argv[1], sys.argv[2] == "h"
-try:
-    with open(path) as f:
-        data = json.load(f)
-except Exception:
-    data = {}
-data.setdefault("bar", {})["horizontal"] = want
-with open(path, "w") as f:
-    json.dump(data, f, indent=4)
+import json, os, sys, tempfile
+path, key, want = os.path.realpath(sys.argv[1]), sys.argv[2], sys.argv[3] == "h"
+with open(path) as f:
+    data = json.load(f)  # A hibás JSON-t nem írjuk felül
+*parents, last = key.split(".")
+node = data
+for part in parents:
+    node = node.setdefault(part, {})
+node[last] = want
+# Atomi csere a symlink célján, hogy a shell soha ne lásson félig írt fájlt
+fd, tmp = tempfile.mkstemp(dir=os.path.dirname(path), prefix=".barmode-")
+with os.fdopen(fd, "w") as f:
+    json.dump(data, f, indent=4, ensure_ascii=False)
     f.write("\n")
-' "$CONFIG" "$1"
+os.chmod(tmp, os.stat(path).st_mode & 0o777)
+os.replace(tmp, path)
+' "$CONFIG" "$KEY" "$1"
 }
 
 describe() {
@@ -71,7 +97,7 @@ case "${1:-}" in
     v|vertical|vertikális|vertikalis)   target="v" ;;
     toggle|t)  [[ "$current" == "h" ]] && target="v" || target="h" ;;
     -h|--help|help)
-        sed -n '3,12p' "$0" | sed 's/^# \?//'
+        sed -n '3,15p' "$0" | sed 's/^# \?//'
         exit 0
         ;;
     *)

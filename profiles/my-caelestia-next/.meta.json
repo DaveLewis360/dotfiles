@@ -1,0 +1,36 @@
+{
+  "name": "My Caelestia (next)",
+  "description": "[BROKEN] Saját fork újraépítve a v2.5.0-ra, kipróbálásra (a hypr/fish/terminál configok a my-caelestia profilé)",
+  "author": "DaveLewis360",
+  "quickshell_source": "/home/dave/Reference/my-caelestia-shell-next",
+  "qml_import_path": "/home/dave/Reference/my-caelestia-shell-next/build/qml",
+  "shell_type": "caelestia",
+  "wallpaper_dir": "/home/dave/Pictures/Wallpapers",
+  "configs": {
+    "hypr": true,
+    "fish": true,
+    "ghostty": true,
+    "foot": true,
+    "shell_json": true,
+    "cli_json": true,
+    "ohmyposh": true
+  },
+  "overlay_target": ".config/hypr/hardware/overlay.conf",
+  "overlay_format": "conf-hl",
+  "action_impl": {
+    "launcher": {
+      "dispatcher": "global",
+      "args": "caelestia:launcher"
+    },
+    "screenshot": {
+      "dispatcher": "exec",
+      "args": "caelestia screenshot"
+    }
+  },
+  "barmode": {
+    "file": ".config/caelestia/shell.json",
+    "key": "fork.bar.horizontal"
+  },
+  "status": "broken",
+  "status_note": "Kísérleti újraépítés (v2.5.0 + 7 fork commit), a kinézet még eltér a régitől. Helyette: dotswitch bar."
+}

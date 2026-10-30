@@ -2,7 +2,7 @@
 # ==============================================================================
 # dotswitch — Unified dotfile & quickshell profile switcher
 # ==============================================================================
-# Usage: dotswitch {profile_name|status|list|active|help}
+# Usage: dotswitch {mine|next|end4|git|status|list|active|help}
 # Profiles are stored in ~/dotfiles/profiles/<name>/
 # Each profile has a .meta.json describing its capabilities.
 # ==============================================================================
@@ -63,6 +63,8 @@ list_profiles() {
         if [[ -f "$meta" ]]; then
             desc=$(python3 -c "import json; print(json.load(open('$meta')).get('description',''))" 2>/dev/null)
             echo "  $name  $desc"
+            note=$(python3 -c "import json,sys; m=json.load(open(sys.argv[1])); print(m.get('status_note','') if m.get('status')=='broken' else '')" "$meta" 2>/dev/null)
+            [[ -n "$note" ]] && echo "      ⚠ $note"
         else
             echo "  $name  (nincs meta)"
         fi
@@ -492,6 +494,28 @@ start_services() {
     :
 }
 
+# --- Broken profiles need confirmation ---
+# A .meta.json "status": "broken" jelzi, hogy a profil kísérleti és hibás lehet.
+# Ilyenkor a váltás előtt rákérdezünk (--force: kérdés nélkül), MÉG a shell
+# leállítása előtt, hogy elutasításkor semmi ne változzon.
+confirm_profile() {
+    local profile="$1" force="$2"
+    [[ "$(read_meta "$profile" "status")" == "broken" ]] || return 0
+
+    echo "  ⚠ A(z) '$profile' profil BROKEN-ként van jelölve."
+    local note
+    note=$(read_meta "$profile" "status_note")
+    [[ -n "$note" ]] && echo "    $note"
+    [[ "$force" == "1" ]] && return 0
+
+    if [[ ! -t 0 ]]; then
+        die "nem interaktív futás; a váltáshoz: dotswitch $profile --force"
+    fi
+    local answer
+    read -r -p "  Biztosan erre váltasz? [y/N] " answer
+    [[ "$answer" =~ ^[yYiI]$ ]] || die "megszakítva, semmi nem változott"
+}
+
 # --- State management ---
 set_active() {
     local profile="$1"
@@ -511,11 +535,23 @@ get_active() {
 # ==============================================================================
 case "${1:-help}" in
     # --- SWITCH PROFILE ---
-    my-caelestia|mine|caelestia|upstream|stable|git|rolling|end4)
+    my-caelestia|mine|my-caelestia-bar|bar|my-caelestia-next|next|caelestia|upstream|stable|git|rolling|end4)
         case "$1" in
             my-caelestia|mine)
                 profile="my-caelestia"
                 desc="Saját Caelestia"
+                ;;
+            my-caelestia-bar|bar)
+                # Upstream Caelestia egyetlen eltéréssel: a bar felül vagy balra
+                # (fork.bar.horizontal). A hypr/fish/terminál a my-caelestia profilé.
+                profile="my-caelestia-bar"
+                desc="Caelestia + bar-kapcsoló"
+                ;;
+            my-caelestia-next|next)
+                # Az újraépített fork (v2.5.0 + patch stack). A hypr/fish/terminál
+                # configja a my-caelestia profilé, csak a shell és a shell.json más.
+                profile="my-caelestia-next"
+                desc="Saját Caelestia, újraépítve (next) — BROKEN"
                 ;;
             git|rolling|stable|caelestia|upstream)
                 # A 'stable' vonal megszűnt (két azonos tagen álló klón volt).
@@ -532,6 +568,7 @@ case "${1:-help}" in
         if [[ ! -d "$DOTFILES_DIR/$profile" ]]; then
             die "Profil nem található: $profile"
         fi
+        confirm_profile "$profile" "$([[ "${2:-}" == "--force" ]] && echo 1 || echo 0)"
 
         echo "════════════════════════════════════════"
         echo "  Váltás: $desc ($profile)"
@@ -560,6 +597,9 @@ case "${1:-help}" in
         echo "════════════════════════════════════════"
         active=$(get_active)
         echo "  Aktív profil: ${active:-ismeretlen}"
+        if [[ -n "$active" && "$(read_meta "$active" "status")" == "broken" ]]; then
+            echo "  ⚠ Az aktív profil BROKEN-ként van jelölve: $(read_meta "$active" "status_note")"
+        fi
         echo ""
         echo "  Config symlinkek:"
         for entry in "${CONFIG_ENTRIES[@]}"; do
@@ -577,7 +617,8 @@ case "${1:-help}" in
     list) list_profiles ;;
     active) get_active ;;
     help|--help|-h)
-        echo "Használat: dotswitch {mine|end4|git|stable|status|list|active|help}"
+        echo "Használat: dotswitch {mine|bar|next|end4|git|stable|status|list|active|help} [--force]"
+        echo "  --force  BROKEN-ként jelölt profilra is kérdés nélkül vált"
         ;;
     *)
         die "Ismeretlen parancs: $1"

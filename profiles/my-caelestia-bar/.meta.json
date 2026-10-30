@@ -1,0 +1,34 @@
+{
+  "name": "My Caelestia (bar toggle)",
+  "description": "Upstream Caelestia (v2.5.0) + egyetlen kapcsoló: felső vagy bal bar (a hypr/fish/terminál configok a my-caelestia profilé)",
+  "author": "DaveLewis360",
+  "quickshell_source": "/home/dave/Reference/my-caelestia-shell-bar",
+  "qml_import_path": "/home/dave/Reference/my-caelestia-shell-bar/build/qml",
+  "shell_type": "caelestia",
+  "wallpaper_dir": "/home/dave/Pictures/Wallpapers",
+  "configs": {
+    "hypr": true,
+    "fish": true,
+    "ghostty": true,
+    "foot": true,
+    "shell_json": true,
+    "cli_json": true,
+    "ohmyposh": true
+  },
+  "overlay_target": ".config/hypr/hardware/overlay.conf",
+  "overlay_format": "conf-hl",
+  "action_impl": {
+    "launcher": {
+      "dispatcher": "global",
+      "args": "caelestia:launcher"
+    },
+    "screenshot": {
+      "dispatcher": "exec",
+      "args": "caelestia screenshot"
+    }
+  },
+  "barmode": {
+    "file": ".config/caelestia/shell.json",
+    "key": "fork.bar.horizontal"
+  }
+}

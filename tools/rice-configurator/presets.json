@@ -1,0 +1,26 @@
+{
+  "_comment": "Amit Dave preferenciáiról már tudunk. A webapp ezekkel előjelöl; Dave bármelyiket felülírhatja. A collect.py ellenőrzi, hogy minden id létezik a katalógusban.",
+  "source": "Dave, 2026-10-30 (az irányító briefje)",
+  "marks": [
+    {"id": "shell:utilities.enabled", "decision": "keep",
+     "reason": "A quick panelt használja, a keep awake miatt."},
+    {"id": "shell:utilities.cards.keepAwake", "decision": "keep",
+     "reason": "A quick panelen egyedül a keep awake funkciót használja."},
+    {"id": "shell:utilities.cards.recorder", "decision": "change", "proposed": false,
+     "reason": "A felvétel-kártya nem kell."},
+    {"id": "shell:utilities.cards.quickToggles", "decision": "change", "proposed": false,
+     "reason": "A kapcsolók (quick toggles) nem kellenek."},
+    {"id": "shell:utilities.quickToggles", "decision": "ignore",
+     "reason": "A kapcsolók kártyája nem kell, így a rajta lévő kapcsolók listája sem."},
+    {"id": "shell:sidebar.enabled", "decision": "change", "proposed": false,
+     "reason": "Az értesítési panelt (sidebar) egyáltalán nem használja."},
+    {"id": "shell:sidebar.showOnHover", "decision": "ignore",
+     "reason": "Az értesítési panel beállítása; a panelt nem használja."},
+    {"id": "shell:sidebar.minHoverThreshold", "decision": "ignore",
+     "reason": "Az értesítési panel beállítása; a panelt nem használja."},
+    {"id": "shell:sidebar.dragThreshold", "decision": "ignore",
+     "reason": "Az értesítési panel beállítása; a panelt nem használja."},
+    {"id": "tokens:sizes.sidebar.width", "decision": "ignore",
+     "reason": "Az értesítési panel szélessége; a panelt nem használja."}
+  ]
+}

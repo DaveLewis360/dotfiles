@@ -1,0 +1,208 @@
+#!/bin/bash
+# ==============================================================================
+# lua-source-dryrun — száraz ellenőrzés a .lua-forrásra váltás előtt
+# ==============================================================================
+# Összeveti, mit töltene be a Hyprland
+#   RÉGI úton: overlay.conf (conf-hl) + translate_hypr_lua.py → .lua
+#   ÚJ úton:   a követett .lua fájlok + az apply_overlay.py által közvetlenül
+#              írt hardware/overlay.lua (hypr_source: lua, fordító nélkül)
+#
+# Semmit nem ír a repóba és a ~/.config-ba: mindent egy ideiglenes könyvtárban
+# futtat. A ~/.config/caelestia/hypr-user.lua-t (ha van) csak OLVASSA, mert a
+# hyprland.lua betölti.
+#
+# Három ellenőrzés:
+#   1. szöveg: a követett .lua fájlok bájtra egyeznek-e a .conf fordításával
+#      (az overlay és a scheme/ kivételével; az eltérés itt csak tájékoztató)
+#   2. tartalom: egy hl-mock (lua) felveszi mindkét config összes hl.* hívását,
+#      és a kettő rendezett listája összevetve. Várt eltérés csak a
+#      scheme/default.conf → default.lua másolás az indításkor.
+#   3. Hyprland --verify-config mindkét configra (ha van Hyprland bináris). A
+#      felső szintű hl.exec_cmd hívásokat egy burkoló kikapcsolja, mert a
+#      verify-config azokat VÉGRE is hajtaná.
+#
+# Használat:  lua-source-dryrun [profil]     (alap: my-caelestia-bar)
+#             KEEP=1 lua-source-dryrun       a munkakönyvtár megmarad
+# Kilépési kód: 0 = egyezik, 1 = váratlan eltérés vagy config-hiba, 2 = használati hiba
+# ==============================================================================
+
+set -euo pipefail
+
+REPO="$(cd "$(dirname "$(readlink -f "$0")")/.." && pwd)"
+profile="${1:-my-caelestia-bar}"
+meta="$REPO/profiles/$profile/.meta.json"
+hypr="$REPO/profiles/$profile/hypr"
+common="$REPO/shared/common.json"
+
+[[ -f "$meta" ]] || { echo "Nincs ilyen profil: $profile" >&2; exit 2; }
+[[ -d "$hypr" ]] || { echo "Nincs hypr könyvtár: $hypr" >&2; exit 2; }
+LUA=$(command -v lua5.4 || command -v lua || command -v luajit || true)
+[[ -n "$LUA" ]] || { echo "Nincs lua értelmező (lua5.4/lua/luajit)" >&2; exit 2; }
+
+work=$(mktemp -d "${TMPDIR:-/tmp}/lua-source-dryrun.XXXXXX")
+if [[ "${KEEP:-0}" == "1" ]]; then
+    echo "Munkakönyvtár (megmarad): $work"
+else
+    trap 'rm -rf "$work"' EXIT
+fi
+
+copy_hypr() {   # a .conf/.lua fájlok másolása (a wallpapers/ nélkül)
+    mkdir -p "$1"
+    tar -C "$hypr/" --exclude=./wallpapers -cf - . | tar -C "$1" -xf -
+    # A scheme/current.* generált és gitignore-os, egy friss checkoutban nincs
+    # meg. Ugyanaz kerül mindkét útba: a default séma (mint első indításkor).
+    if [[ ! -f "$1/scheme/current.lua" && -f "$1/scheme/default.lua" ]]; then
+        cp "$1/scheme/default.lua" "$1/scheme/current.lua"
+        [[ -f "$1/scheme/current.conf" || ! -f "$1/scheme/default.conf" ]] \
+            || cp "$1/scheme/default.conf" "$1/scheme/current.conf"
+        scheme_note="a scheme/current.* hiányzott, a default.* került a helyére"
+    fi
+}
+scheme_note=""
+
+# ── RÉGI út ──────────────────────────────────────────────────────────────────
+copy_hypr "$work/old"
+python3 "$REPO/scripts/apply_overlay.py" "$common" "$work/old/hardware/overlay.conf" conf-hl \
+    --action-impl "$meta" 2>"$work/old-overlay.err" >/dev/null
+python3 "$REPO/scripts/translate_hypr_lua.py" "$work/old" >/dev/null
+
+# ── ÚJ út ────────────────────────────────────────────────────────────────────
+copy_hypr "$work/new"
+rm -f "$work/new/hardware/overlay.lua"          # generált fájl, újat ír az overlay
+python3 "$REPO/scripts/apply_overlay.py" "$common" "$work/new/hardware/overlay.lua" lua \
+    --action-impl "$meta" 2>"$work/new-overlay.err" >/dev/null
+
+rc=0
+echo "════════════════════════════════════════"
+echo "  .lua-forrás száraz ellenőrzés: $profile"
+echo "  repó: $REPO ($(git -C "$REPO" rev-parse --abbrev-ref HEAD 2>/dev/null || echo '?'))"
+echo "════════════════════════════════════════"
+[[ -n "$scheme_note" ]] && echo "  ℹ $scheme_note (mindkét útban ugyanaz)"
+for f in old new; do
+    if [[ -s "$work/$f-overlay.err" ]]; then
+        echo "  ⚠ apply_overlay ($f) figyelmeztetés:"; sed 's/^/      /' "$work/$f-overlay.err"
+    fi
+done
+
+# ── 1. szöveges összevetés ───────────────────────────────────────────────────
+echo ""
+echo "1. Követett .lua ↔ a .conf fordítása (overlay és scheme/ nélkül)"
+textdiff=0
+while IFS= read -r rel; do
+    case "$rel" in ./hardware/overlay.lua|./scheme/*) continue ;; esac
+    if ! cmp -s "$work/old/$rel" "$work/new/$rel"; then
+        echo "   eltér: ${rel#./}"
+        { diff -u --label "fordítás/${rel#./}" --label "követett/${rel#./}" \
+            "$work/old/$rel" "$work/new/$rel" || true; } | sed 's/^/      /' | head -40
+        textdiff=$((textdiff + 1))
+    fi
+done < <(cd "$work/old" && find . -name '*.lua' | sort)
+[[ $textdiff -eq 0 ]] && echo "   ✓ minden fájl bájtra egyezik"
+
+# ── 2. tartalmi összevetés hl-mockkal ────────────────────────────────────────
+cat > "$work/mock.lua" <<'LUA'
+local dir = arg[1]
+package.path = dir .. "/?.lua;" .. package.path
+local out, prefix = {}, ""
+
+local function ser(v)
+    local t = type(v)
+    if t == "string" then return string.format("%q", v) end
+    if t ~= "table" then return t == "function" and "<fn>" or tostring(v) end
+    if rawget(v, "__dsp") then return "dsp." .. v.__dsp .. "(" .. v.__args .. ")" end
+    local keys = {}
+    for k in pairs(v) do keys[#keys + 1] = k end
+    table.sort(keys, function(a, b) return tostring(a) < tostring(b) end)
+    local parts = {}
+    for _, k in ipairs(keys) do parts[#parts + 1] = tostring(k) .. "=" .. ser(v[k]) end
+    return "{" .. table.concat(parts, ",") .. "}"
+end
+local function args_str(...)
+    local p = {}
+    for i = 1, select("#", ...) do p[i] = ser((select(i, ...))) end
+    return table.concat(p, ", ")
+end
+local function rec(s) out[#out + 1] = prefix .. s end
+local function flatten(path, t)
+    for k, v in pairs(t) do
+        local p = path == "" and tostring(k) or (path .. "." .. tostring(k))
+        if type(v) == "table" and not rawget(v, "__dsp") then flatten(p, v)
+        else rec("config " .. p .. " = " .. ser(v)) end
+    end
+end
+local function dsp_proxy(path)
+    return setmetatable({}, {
+        __index = function(_, k) return dsp_proxy(path == "" and k or (path .. "." .. k)) end,
+        __call = function(_, ...) return { __dsp = path, __args = args_str(...) } end,
+    })
+end
+hl = setmetatable({
+    dsp = dsp_proxy(""),
+    config = function(t) flatten("", t) end,
+    on = function(ev, fn)
+        local saved = prefix
+        prefix = prefix .. "on:" .. tostring(ev) .. " > "
+        fn()
+        prefix = saved
+    end,
+}, { __index = function(_, k) return function(...) rec(k .. "(" .. args_str(...) .. ")") end end })
+
+dofile(dir .. "/hyprland.lua")
+table.sort(out)
+for _, l in ipairs(out) do print(l) end
+LUA
+
+echo ""
+echo "2. A hl.* hívások összevetése (mock, semmi nem fut le)"
+"$LUA" "$work/mock.lua" "$work/old" > "$work/old.calls"
+"$LUA" "$work/mock.lua" "$work/new" > "$work/new.calls"
+echo "   régi út: $(wc -l < "$work/old.calls") hívás, új út: $(wc -l < "$work/new.calls") hívás"
+diff "$work/old.calls" "$work/new.calls" | grep '^[<>]' > "$work/calls.diff" || true
+grep -v 'scheme/default\.\(conf\|lua\)' "$work/calls.diff" > "$work/calls.unexpected" || true
+if [[ -s "$work/calls.diff" ]]; then
+    echo "   eltérések (< régi, > új):"
+    sed 's/^/      /' "$work/calls.diff"
+fi
+if [[ -s "$work/calls.unexpected" ]]; then
+    echo "   ✗ VÁRATLAN eltérés: $(wc -l < "$work/calls.unexpected") sor"
+    rc=1
+else
+    echo "   ✓ a két config ugyanazt állítja be (a várt scheme-másoláson kívül)"
+fi
+
+# ── 3. Hyprland --verify-config ──────────────────────────────────────────────
+echo ""
+echo "3. Hyprland --verify-config"
+if command -v Hyprland >/dev/null; then
+    for f in old new; do
+        printf 'hl.exec_cmd = function(...) end\ndofile("%s/hyprland.lua")\n' "$work/$f" \
+            > "$work/$f/__dryrun_verify.lua"
+        res=$(timeout -k 2 30 Hyprland --verify-config -c "$work/$f/__dryrun_verify.lua" \
+              </dev/null 2>&1 | sed -n '/Config parsing result/,$p' | grep -v -e '^$' -e 'Config parsing result' || true)
+        if [[ "$res" == "config ok" ]]; then
+            echo "   ✓ $f: config ok"
+        else
+            echo "   ✗ $f:"; printf '%s\n' "$res" | sed 's/^/      /'
+            [[ $f == new ]] && rc=1
+        fi
+    done
+else
+    echo "   – nincs Hyprland bináris, kimarad"
+fi
+
+echo ""
+if [[ $rc -eq 0 ]]; then
+    echo "  ✓ EREDMÉNY: az új út ugyanazt a configot adja. A váltás lépései:"
+    echo "      git -C ~/dotfiles switch agent/dotfiles-lua-source-20261030"
+    # A régi, fordító által írt overlay.lua-ban nincs managed-jelölő, ezért az
+    # apply_overlay.py az egészet felhasználói tartalomnak nézné, és mögé írná
+    # az új blokkot (duplikált, bár hatásában azonos beállítások).
+    live_ov="$HOME/dotfiles/profiles/$profile/hypr/hardware/overlay.lua"
+    if [[ -f "$live_ov" ]] && ! grep -q '^-- >>> dotswitch managed' "$live_ov"; then
+        echo "      mv $live_ov $live_ov.bak-pre-lua-source"
+    fi
+    echo "      dotswitch ${profile#my-caelestia-}"
+else
+    echo "  ✗ EREDMÉNY: eltérés van, ne válts még (KEEP=1-gyel a részletek megmaradnak)"
+fi
+exit $rc

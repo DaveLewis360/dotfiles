@@ -263,16 +263,26 @@ except:
     local current_shell_type
     current_shell_type=$(read_meta "$profile" "shell_type")
 
-    # A közös overlay a Lua-generálás ELŐTT fut, hogy a .conf legyen az egyetlen
-    # igazságforrás: a translator abból állítja elő a .lua-t. Így egy külön
-    # lefuttatott translator sem törli el a közös beállításokat.
+    # A közös overlay a Lua-generálás ELŐTT fut: .conf-forrású profilnál
+    # (overlay_format conf-hl) a translator az overlay.conf-ból állítja elő a
+    # .lua-t, így egy külön lefuttatott translator sem törli el a közös
+    # beállításokat. .lua-forrású profilnál az overlay közvetlenül .lua-t ír.
     apply_overlay "$profile"
     link_universal_apps
 
+    # A .meta.json "hypr_source": "lua" jelzi, hogy a profil .lua fájljai a
+    # szerkesztett forrás (Hyprland 0.57 óta csak .lua-t tölt be). Ilyenkor a
+    # .conf → .lua fordító NEM futhat, mert felülírná a kézi .lua-módosításokat
+    # a régi .conf tartalmával. A többi profilnál (pl. end4) a régi út marad.
     if [[ -d "$hypr_dir" ]]; then
-        echo "  Lua configok generálása/frissítése a .conf fájlokból..."
-        python3 "$HOME/dotfiles/scripts/translate_hypr_lua.py" "$hypr_dir" >/dev/null 2>&1 || true
-        log "Lua configok frissítve"
+        if [[ "$(read_meta "$profile" "hypr_source")" == "lua" ]]; then
+            echo "  Lua configok: a .lua a forrás, a .conf → .lua fordítás kimarad"
+            log "Lua configok: hypr_source=lua, fordítás kihagyva"
+        else
+            echo "  Lua configok generálása/frissítése a .conf fájlokból..."
+            python3 "$HOME/dotfiles/scripts/translate_hypr_lua.py" "$hypr_dir" >/dev/null 2>&1 || true
+            log "Lua configok frissítve"
+        fi
     fi
 
     # Caelestia JSONs

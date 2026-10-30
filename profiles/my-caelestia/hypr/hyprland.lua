@@ -1,3 +1,7 @@
+-- --- HYPRLAND MASTER CONFIG (Lua) ---
+-- Ez a forrás (hypr_source: lua). A .conf fájlok mellette már nem élnek:
+-- a Hyprland 0.57 csak .lua-t tölt be, és a dotswitch sem fordít belőlük.
+-- A közös beállítások a hardware/overlay.lua-ba kerülnek (dotswitch overlay).
 package.loaded["hardware.monitors"] = nil
 local _mod = require("hardware.monitors")
 if type(_mod) == "table" then for k, v in pairs(_mod) do _G[k] = v end end
@@ -7,7 +11,8 @@ if type(_mod) == "table" then for k, v in pairs(_mod) do _G[k] = v end end
 package.loaded["hardware.input"] = nil
 local _mod = require("hardware.input")
 if type(_mod) == "table" then for k, v in pairs(_mod) do _G[k] = v end end
-hl.on("hyprland.start", function() hl.exec_cmd("cp -L --no-preserve=mode --update=none ~/.config/hypr/scheme/default.conf ~/.config/hypr/scheme/current.conf") end)
+-- Első indításkor a színséma alapértéke (a caelestia CLI később felülírja).
+hl.on("hyprland.start", function() hl.exec_cmd("cp -L --no-preserve=mode --update=none ~/.config/hypr/scheme/default.lua ~/.config/hypr/scheme/current.lua") end)
 package.loaded["scheme.current"] = nil
 local _mod = require("scheme.current")
 if type(_mod) == "table" then for k, v in pairs(_mod) do _G[k] = v end end

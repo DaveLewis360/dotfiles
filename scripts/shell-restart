@@ -7,6 +7,12 @@
 #   shell-restart --start  csak elindít, ha nem fut (login, lock-visszaállítás)
 #   shell-restart --kill   csak leállít
 #   shell-restart --status csak jelentést ír, nem nyúl semmihez
+#   shell-restart --check  csak a config épségét nézi (üres .qml/.js fájlok)
+#
+# Indítás előtt (és még a futó shell leállítása előtt) ellenőrzi, hogy nincs-e
+# 0 bájtos .qml/.js fájl a configban. Egy hirtelen leállás után az ext4 a frissen
+# kiírt fájlokat üresen hagyhatja, és a Quickshell egy üres QML-fájlon SIGSEGV-vel
+# elszáll. Ilyenkor nem indít, kiírja a fájlokat és értesítést küld.
 #
 # Miért nem elég a korábbi bind ("qs -c caelestia kill; sleep .1; caelestia
 # shell -d"): a Quickshell példány-nyilvántartása verzióváltáskor sémát vált —
@@ -29,7 +35,8 @@ while [[ $# -gt 0 ]]; do
         --kill)   MODE=kill; shift ;;
         --start)  MODE=start; shift ;;
         --status) MODE=status; shift ;;
-        -h|--help) sed -n '3,10p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+        --check)  MODE=check; shift ;;
+        -h|--help) sed -n '3,15p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
         *) echo "Ismeretlen opció: $1" >&2; exit 1 ;;
     esac
 done
@@ -61,6 +68,42 @@ read_pids() {
 
 read_pids pids
 
+# ── Config-ellenőrzés: üres QML-fájlok ──────────────────────────────────────
+# A config könyvtára (symlink is lehet). A tesztekhez felülírható.
+config_dir="${SHELL_RESTART_CONFIG_DIR:-${XDG_CONFIG_HOME:-$HOME/.config}/quickshell/$CONFIG}"
+
+empty_files() {
+    local dir
+    dir="$(readlink -f "$config_dir" 2>/dev/null)" || return 0
+    [[ -d $dir ]] || return 0
+    find "$dir" \( -name .git -o -name build -o -name node_modules \) -prune -o \
+        -type f \( -name '*.qml' -o -name '*.js' -o -name '*.mjs' \) -size 0 -print 2>/dev/null
+}
+
+check_config() {
+    local -a empty=()
+    local f
+    while IFS= read -r f; do [[ -n $f ]] && empty+=("$f"); done < <(empty_files)
+    [[ ${#empty[@]} -eq 0 ]] && return 0
+
+    echo "  ${C_ERR}✗${C_0} ${#empty[@]} üres fájl a configban, a shell nem indul:" >&2
+    printf '      %s\n' "${empty[@]}" >&2
+    echo "  ${C_D}visszaállítás: git -C $(readlink -f "$config_dir") status / git restore <fájl>${C_0}" >&2
+    if command -v notify-send >/dev/null 2>&1; then
+        local list
+        list="$(printf '%s\n' "${empty[@]##*/}" | head -n 8 || true)"
+        timeout 5 notify-send -u critical -a shell-restart \
+            "Caelestia: ${#empty[@]} üres QML-fájl, a shell nem indult" \
+            "$list"$'\n'"Részletek: shell-restart --check" 2>/dev/null || true
+    fi
+    return 1
+}
+
+if [[ $MODE == check ]]; then
+    if check_config; then echo "  ${C_OK}✓${C_0} nincs üres .qml/.js fájl"; exit 0; fi
+    exit 2
+fi
+
 if [[ $MODE == status ]]; then
     case ${#pids[@]} in
         0) echo "  nem fut példány"; exit 1 ;;
@@ -75,6 +118,11 @@ fi
 if [[ $MODE == start && ${#pids[@]} -gt 0 ]]; then
     echo "  már fut (PID ${pids[*]})"
     exit 0
+fi
+
+# A futó shellt csak akkor állítjuk le, ha az új indulni is tud
+if [[ $MODE != kill ]] && ! check_config; then
+    exit 2
 fi
 
 # ── Leállítás ───────────────────────────────────────────────────────────────
@@ -119,11 +167,30 @@ qml_path=""
 # A systemd-run --scope új, önálló scope-ot nyit. A `caelestia shell -d`
 # daemonizál, a leszakadó gyerek a scope tagja marad, ezért a --collect nem
 # szedi el alóla. Ha nincs systemd-run, marad a közvetlen indítás.
+#
+# Videós háttér: a Qt FFmpeg-backendje szoftveresen dekódol (üres eszközlista),
+# így a háttérvideó nem használja sem az NVIDIA NVDEC-et, sem a VA-API-t. A shell
+# a kijelzőre átkódolt másolatot játssza (custom/wallpaper/video-native.sh),
+# ennek a dekódolása kevés CPU. Felülírható: CAELESTIA_VIDEO_HWDEC=vaapi|cuda.
+#
+# Ha a shell az elmúlt 10 percben legalább kétszer összeomlott, videó nélkül indul
+# (CAELESTIA_VIDEO_WALLPAPER=0: a poszter marad), és szól róla.
+video_env=(QT_FFMPEG_DECODING_HW_DEVICE_TYPES="${CAELESTIA_VIDEO_HWDEC-}")
+if command -v coredumpctl >/dev/null 2>&1; then
+    crashes=$( { coredumpctl list --no-legend --no-pager -q --since "-10min" /usr/bin/quickshell 2>/dev/null || true; } | wc -l)
+    if [[ ${crashes:-0} -ge 2 ]]; then
+        video_env+=(CAELESTIA_VIDEO_WALLPAPER=0)
+        echo "  ${C_WRN}!${C_0} $crashes összeomlás 10 percen belül: videós háttér nélkül indul"
+        timeout 5 notify-send -u normal -a shell-restart "Caelestia: videós háttér kikapcsolva" \
+            "$crashes összeomlás 10 percen belül; a poszter marad. Visszakapcsolás: shell-restart (10 perc múlva)" 2>/dev/null || true
+    fi
+fi
+
 launch() {
     if [[ -n $qml_path ]]; then
-        QML_IMPORT_PATH="$qml_path" "$@"
+        env QML_IMPORT_PATH="$qml_path" "${video_env[@]}" "$@"
     else
-        "$@"
+        env "${video_env[@]}" "$@"
     fi
 }
 

@@ -349,8 +349,26 @@ for conf_file in conf_files:
 
 known_vars = sorted(list(known_vars), key=len, reverse=True)
 
+
+def is_scheme_file(path):
+    """A <hypr_dir>/scheme/ alatti fájl-e (színséma)."""
+    rel = os.path.relpath(path, hypr_dir)
+    return rel.split(os.sep)[0] == "scheme"
+
+
 for conf_file in conf_files:
     lua_file = conf_file[:-5] + ".lua"
+    # A scheme/ színsémáit a caelestia CLI közvetlenül .lua-ba írja
+    # (scheme/current.lua, ha a hyprland.lua létezik). A scheme/current.conf
+    # ehhez képest egy régi pillanatkép: ha innen fordítanánk, minden dotswitch
+    # visszaírná a régi színeket a CLI által írt current.lua-ra. Ezért a
+    # scheme/ .lua fájljait SOSEM írjuk felül; csak akkor generáljuk, ha még
+    # nincsenek meg (első indítás, különben a require("scheme.current") hibát
+    # dobna). A változóneveiket fent továbbra is beolvassuk (known_vars), mert
+    # a theme.conf rájuk hivatkozik, pl. $primaryContainercc.
+    if is_scheme_file(conf_file) and os.path.lexists(lua_file):
+        print(f"Skipped {lua_file} (scheme: a caelestia írja, nem a fordító)")
+        continue
     with open(conf_file, "r") as f:
         lines = f.readlines()
     lua_content = parse_hyprland_conf(lines, known_vars)

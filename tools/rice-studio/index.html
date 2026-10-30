@@ -1,0 +1,119 @@
+<!doctype html>
+<html lang="hu">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Rice-stúdió — Hyprland</title>
+<link rel="stylesheet" href="studio.css">
+</head>
+<body>
+<header class="top">
+  <div class="brand">
+    <span class="dot"></span>
+    <h1>Rice-stúdió</h1>
+    <span class="sub">Hyprland dotfile-készítő élő előnézettel</span>
+  </div>
+  <div class="actions">
+    <button id="btnPreset" class="ghost" title="Kiindulási stílus betöltése">Stílus…</button>
+    <button id="btnReset" class="ghost" title="Vissza az alapértékekre">Alaphelyzet</button>
+    <button id="btnExport" class="primary" title="A config exportálása és letöltése">Export…</button>
+  </div>
+</header>
+
+<div class="layout">
+  <!-- ÉLŐ ELŐNÉZET -->
+  <section class="stage" id="stage">
+    <div class="wp" id="wp">
+      <!-- bar -->
+      <div class="bar" id="bar">
+        <div class="bar-left">
+          <span class="bar-logo">❖</span>
+          <span class="ws ws-on">1</span><span class="ws">2</span><span class="ws">3</span><span class="ws">4</span>
+        </div>
+        <div class="bar-mid"><span id="barClock">09:41</span></div>
+        <div class="bar-right">
+          <span class="bar-ico">▲</span><span class="bar-ico">◆</span><span class="bar-ico" id="barBat">84%</span>
+        </div>
+      </div>
+
+      <!-- ablakok -->
+      <div class="win win-inactive" id="winB">
+        <div class="win-tb"><span class="tb-dots"><i></i><i></i><i></i></span><span class="tb-title">fish — háttér</span></div>
+        <div class="win-body mono" id="winBbody">
+          <div><span class="prompt">~</span> fastfetch</div>
+          <div class="muted">árvíztűrő tükörfúrógép</div>
+          <div class="muted">the quick brown fox 0123</div>
+        </div>
+      </div>
+
+      <div class="win win-active" id="winA">
+        <div class="win-tb"><span class="tb-dots"><i></i><i></i><i></i></span><span class="tb-title">nvim — studio.lua</span></div>
+        <div class="win-body mono" id="winAbody">
+          <div><span class="c-key">local</span> <span class="c-fn">theme</span> = {}</div>
+          <div>theme.<span class="c-fn">rounding</span> = <span class="c-num">10</span></div>
+          <div>theme.<span class="c-fn">gaps</span>    = <span class="c-num">8</span></div>
+          <div class="muted">-- árvíztűrő tükörfúrógép 0123</div>
+        </div>
+      </div>
+
+      <!-- lebegő paletta-kártya -->
+      <div class="win win-float" id="winC">
+        <div class="win-body">
+          <div class="pal" id="palStrip"></div>
+          <div class="fontsample" id="fontSample">Árvíztűrő tükörfúrógép</div>
+        </div>
+      </div>
+
+      <!-- animáció-demó objektum -->
+      <div class="anim-demo" id="animDemo" title="Kattints: animáció újrajátszása"></div>
+      <span class="wp-tag" id="wpTag">wallpaper</span>
+    </div>
+    <div class="stage-foot">
+      <label class="chk"><input type="checkbox" id="tglLive" checked> animáció</label>
+      <button class="mini" id="btnReplay">▶ animáció</button>
+      <span class="spacer"></span>
+      <span class="hint" id="dirtyHint"></span>
+    </div>
+  </section>
+
+  <!-- VEZÉRLŐK -->
+  <aside class="panel" id="panel">
+    <nav class="tabs" id="tabs"></nav>
+    <div class="controls" id="controls"></div>
+  </aside>
+</div>
+
+<!-- export párbeszéd -->
+<dialog id="dlgExport">
+  <form method="dialog">
+    <h2>Export</h2>
+    <p class="d-sub">Ez nem írja felül az élő configot — csak megmutatja és letölti. A fájlt te másolod a helyére.</p>
+    <div class="fmt-row">
+      <label><input type="radio" name="fmt" value="conf" checked> Hyprland <code>.conf</code></label>
+      <label><input type="radio" name="fmt" value="lua"> Hyprland <code>.lua</code> (hyprlang-lua)</label>
+      <label><input type="radio" name="fmt" value="json"> JSON (összegzés)</label>
+    </div>
+    <label class="chk2"><input type="checkbox" id="exOnlyChanged" checked> csak az alapértéktől eltérők</label>
+    <textarea id="exOut" readonly spellcheck="false"></textarea>
+    <div class="dlg-actions">
+      <button type="button" id="btnCopy" class="ghost">Vágólapra</button>
+      <button type="button" id="btnDownload" class="primary">Letöltés</button>
+      <button value="close" class="ghost">Bezár</button>
+    </div>
+  </form>
+</dialog>
+
+<!-- stílus-választó -->
+<dialog id="dlgPreset">
+  <form method="dialog">
+    <h2>Kiindulási stílus</h2>
+    <p class="d-sub">Egy kiindulópont, amit utána szabadon hangolsz. Nem caelestia-specifikus.</p>
+    <div class="preset-grid" id="presetGrid"></div>
+    <div class="dlg-actions"><button value="close" class="ghost">Mégse</button></div>
+  </form>
+</dialog>
+
+<noscript>A stúdióhoz JavaScript kell.</noscript>
+<script src="studio.js"></script>
+</body>
+</html>

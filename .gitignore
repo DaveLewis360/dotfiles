@@ -1,8 +1,9 @@
 # ==============================================================================
 # ~/dotfiles — verziókövetés
 # ==============================================================================
-# Elv: MINDEN saját tartalom (profiles/my-caelestia, profiles/git, shared,
-# scripts, apps) követve van. A beágyazott UPSTREAM klónok nincsenek, mert
+# Elv: MINDEN saját tartalom (profiles/my-caelestia, profiles/my-caelestia-bar,
+# profiles/my-caelestia-next, profiles/git, shared, scripts, apps) követve van,
+# a generált fájlok (lent) nem. A beágyazott UPSTREAM klónok nincsenek, mert
 # azoknak saját git történetük van — helyettük a profiles/UPSTREAM.md
 # manifest írja le, honnan és melyik commitról állíthatók vissza.
 # ==============================================================================
@@ -27,6 +28,16 @@ dotswitch.bak-*
 
 # --- Futásidejű / gépspecifikus ---
 *.log
+
+# --- Python bytecode (a scripts/*.py importjai hozzák létre) ---
+__pycache__/
+*.pyc
+
+# --- A dotswitch link_universal_apps által létrehozott symlinkek ---
+# Az apps/ghostty/* fájlokat a dotswitch a ~/.config/ghostty-ba linkeli; mivel
+# az a profil ghostty könyvtárára mutat, a symlink a profilban jön létre. A
+# forrás az apps/ghostty/blur-shim.c (követve), a profilbeli link generált.
+profiles/*/ghostty/blur-shim.c
 
 # --- Futásidejű színséma (a caelestia generálja az aktuális wallpaperből) ---
 # A default.conf / default.lua KÖVETVE van, csak az aktuális állapot nem.

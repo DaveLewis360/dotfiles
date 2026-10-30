@@ -79,11 +79,19 @@
             },
             {
                 "enabled": true,
+                "id": "miniDash"
+            },
+            {
+                "enabled": true,
                 "id": "spacer"
             },
             {
                 "enabled": true,
                 "id": "tray"
+            },
+            {
+                "enabled": false,
+                "id": "homelab"
             },
             {
                 "enabled": true,
@@ -118,6 +126,7 @@
             "showLockStatus": true,
             "showMicrophone": true,
             "showNetwork": true,
+            "showNumLock": false,
             "showWifi": true
         },
         "tray": {
@@ -166,7 +175,7 @@
                 "mpv"
             ],
             "terminal": [
-                "/usr/bin/ghostty",
+                "ghostty",
                 "--gtk-single-instance=true"
             ]
         },
@@ -484,15 +493,17 @@
             "gameModeChanged": true,
             "kbLayoutChanged": true,
             "nowPlaying": false,
-            "numLockChanged": true,
+            "numLockChanged": false,
             "vpnChanged": true
         },
         "vpn": {
             "enabled": false,
             "provider": [
                 {
+                    "id": "vpn-mt4z31uc-2bl8n"
                 }
-            ]
+            ],
+            "selectedProvider": "vpn-mt4z31uc-2bl8n"
         }
     }
 }

@@ -17,31 +17,60 @@
             "background": false,
             "showDate": true
         },
+        "persistent": true,
         "popouts": {
             "activeWindow": false
         },
         "scrollActions": {
             "workspaces": true
         },
-        "status": {
-            "showAudio": true,
-            "showKbLayout": false,
-            "showMicrophone": true
-        },
+        "showOnHover": false,
+        "statusIcons": [
+            {
+                "enabled": false,
+                "id": "lockStatus"
+            },
+            {
+                "enabled": false,
+                "id": "audio"
+            },
+            {
+                "enabled": false,
+                "id": "microphone"
+            },
+            {
+                "enabled": false,
+                "id": "kbLayout"
+            },
+            {
+                "enabled": true,
+                "id": "network"
+            },
+            {
+                "enabled": true,
+                "id": "bluetooth"
+            },
+            {
+                "enabled": true,
+                "id": "battery"
+            }
+        ],
         "tray": {
             "background": false,
             "compact": true
         },
         "workspaces": {
             "activeIndicator": true,
+            "activeTrail": true,
+            "occupiedBg": false,
             "showWindows": false,
-            "showWindowsOnSpecialWorkspaces": true
+            "showWindowsOnSpecialWorkspaces": false
         }
     },
     "general": {
         "apps": {
             "terminal": [
-                "/usr/bin/ghostty",
+                "ghostty",
                 "--gtk-single-instance=true"
             ]
         }

@@ -3,7 +3,7 @@
 
 A közös (rice-független) beállításokat (~/dotfiles/shared/common.json) ráteszi a profil
 user-override fájljára egy "managed block" formában, a profil natív formátumában:
-  - lua      hl.config({ input = { ... } }) / hl.bind(...) / hl.config({ windowrule = ... })
+  - lua      hl.config({ input = { ... } }) / hl.bind(...) / hl.window_rule(...)
   - conf     igazi Hyprland conf:               windowrule = RULE, class:^(...)$
   - conf-hl  a translate_hypr_lua.py bemenete:  windowrule = RULE, match:class ^(...)$
 
@@ -224,7 +224,51 @@ def build_binds(binds: list, fmt: str) -> list[str]:
 # ─────────────────────────────────────────────────────────────────────────────
 #
 #   conf:  windowrule = opacity 1 1 override, class:^(foo)$
-#   lua:   hl.config({ windowrule = { "opacity 1 1 override, class:^(foo)$" } })
+#   lua:   hl.window_rule({ match = { class = "^(foo)$" }, opacity = "1 1 override" })
+#
+# A lua forma korábban hl.config({ windowrule = { "<szabály>, <match>" } })
+# volt. A Hyprland 0.57 ezt hiba nélkül elfogadja, de figyelmen kívül hagyja
+# (a 'Hyprland --verify-config' egy kitalált szabálynévre is "config ok"-t ad),
+# vagyis a közös ablakszabályok csendben nem érvényesültek. A hl.window_rule()
+# mezőit viszont ellenőrzi ("unknown field"), és a translator is ezt írja.
+
+def _lua_key(k: str) -> str:
+    """Lua tábla-kulcs: azonosító, ha lehet, különben ["..."]."""
+    if k.replace("_", "").isalnum() and not k[0].isdigit():
+        return k
+    return f'["{lua_str(k)}"]'
+
+
+def _lua_rule_value(v: str) -> str:
+    """A szabály értéke: true/false/egész szám nyersen, minden más string."""
+    if v in ("true", "false") or v.isdigit():
+        return v
+    return f'"{lua_str(v)}"'
+
+
+def lua_window_rule(rule: str, match) -> str | None:
+    """Egy ablakszabály hl.window_rule() hívásként, vagy None, ha nem képezhető le.
+
+    rule:  "opacity 1 1 override" → opacity = "1 1 override"
+           "float"                → float = true
+    match: {"class": "^(foo)$"}   → match = { class = "^(foo)$" }
+    """
+    key, _, val = rule.strip().partition(" ")
+    if not key:
+        return None
+    val = val.strip()
+    fields = []
+    if isinstance(match, dict):
+        parts = [f'{_lua_key(k)} = "{lua_str(str(v))}"'
+                 for k, v in match.items() if k not in IGNORED_KEYS]
+        if parts:
+            fields.append("match = { " + ", ".join(parts) + " }")
+    elif isinstance(match, str) and match.strip():
+        # A "class:^(...)$" szöveges formát nem bontjuk szét: a regexben is
+        # lehet vessző vagy kettőspont. Használj {"class": "..."} objektumot.
+        return None
+    fields.append(f"{_lua_key(key)} = {_lua_rule_value(val) if val else 'true'}")
+    return "hl.window_rule({ " + ", ".join(fields) + " })"
 
 def render_match(match, fmt: str) -> str:
     """A match-feltétel a cél formátum szerint.
@@ -246,6 +290,23 @@ def render_match(match, fmt: str) -> str:
 
 
 def build_windowrules(rules: list, fmt: str) -> list[str]:
+    if fmt == "lua":
+        lines = []
+        for r in rules:
+            if isinstance(r, dict):
+                if r.get("enabled") is False or not r.get("rule", "").strip():
+                    continue
+                line = lua_window_rule(r["rule"], r.get("match", ""))
+            else:
+                line = None
+            if line is None:
+                print(f"apply_overlay: ablakszabály kihagyva, lua-ra nem képezhető le "
+                      f"(adj meg {{\"rule\": ..., \"match\": {{...}}}} objektumot): {r}",
+                      file=sys.stderr)
+                continue
+            lines.append(line)
+        return lines
+
     entries = []
     for r in rules:
         if isinstance(r, dict):

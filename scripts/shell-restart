@@ -168,17 +168,65 @@ qml_path=""
 # daemonizál, a leszakadó gyerek a scope tagja marad, ezért a --collect nem
 # szedi el alóla. Ha nincs systemd-run, marad a közvetlen indítás.
 #
-# Videós háttér: a Qt FFmpeg-backendje szoftveresen dekódol (üres eszközlista),
-# így a háttérvideó nem használja sem az NVIDIA NVDEC-et, sem a VA-API-t. A shell
-# a kijelzőre átkódolt másolatot játssza (custom/wallpaper/video-native.sh),
-# ennek a dekódolása egy CPU-mag kb. 30-40 %-a. Felülírható: CAELESTIA_VIDEO_HWDEC=vaapi (Intel
-# iGPU; ilyenkor LIBVA_DRIVER_NAME=iHD is kell, és ezt a launcherből indított
-# appok is megkapják) vagy CAELESTIA_VIDEO_HWDEC=cuda (NVIDIA NVDEC).
+# Videós háttér: a shell a kijelzőre átkódolt másolatot játssza
+# (custom/wallpaper/video-native.sh), és alapból az Intel iGPU dekódolja VA-API-val
+# (QT_FFMPEG_DECODING_HW_DEVICE_TYPES=vaapi, LIBVA_DRIVER_NAME=iHD): a CPU-ból egy mag
+# kb. 10 %-a, az NVIDIA kártya P8-ban marad. Ha a VA-API nem indul el, a Qt
+# szoftveresen dekódol (a CUDA/NVDEC nincs a listán). Felülírható:
+# CAELESTIA_VIDEO_HWDEC= (üres: szoftveres, egy mag kb. 30-40 %-a) vagy
+# CAELESTIA_VIDEO_HWDEC=cuda (NVIDIA NVDEC).
+#
+# Ez a két változó csak a shellnek szól. A session saját értékeit a
+# CAELESTIA_CHILD_ENV viszi (JSON, null = nincs beállítva); a shell appindító pontjai
+# (custom/env/ChildEnv.qml) ezzel indítják a gyerekeket, így a launcherből indított
+# appok a session LIBVA_DRIVER_NAME-jét kapják, nem az iHD-t.
 #
 # Ha a shell az elmúlt 10 percben legalább kétszer összeomlott, videó nélkül indul
 # (CAELESTIA_VIDEO_WALLPAPER=0: a poszter marad), és szól róla.
-video_env=(QT_FFMPEG_DECODING_HW_DEVICE_TYPES="${CAELESTIA_VIDEO_HWDEC-}")
-if [[ ${CAELESTIA_VIDEO_HWDEC-} == vaapi ]]; then video_env+=(LIBVA_DRIVER_NAME=iHD); fi
+hwdec="${CAELESTIA_VIDEO_HWDEC-vaapi}"
+if [[ $hwdec == vaapi ]]; then
+    intel_node=""
+    for node in /sys/class/drm/renderD*; do
+        case "$(basename "$(readlink -f "$node/device/driver" 2>/dev/null)")" in
+            i915|xe) intel_node="/dev/dri/${node##*/}"; break ;;
+        esac
+    done
+    if [[ -z $intel_node || ! -e /usr/lib/dri/iHD_drv_video.so ]]; then
+        echo "  ${C_WRN}!${C_0} nincs Intel render node vagy iHD VA-API driver: szoftveres videó-dekódolás"
+        hwdec=""
+    fi
+fi
+
+# A session értéke egy változóra: a hívó env-jéből, vagy ha a hívó maga is egy shell
+# env-jét örökölte (benne van a CAELESTIA_CHILD_ENV), akkor abból.
+json_value() {
+    local v=$1 bs='\' q='"'
+    v=${v//"$bs"/"$bs$bs"}; v=${v//"$q"/"$bs$q"}
+    printf '"%s"' "$v"
+}
+session_value() {
+    local name=$1 inherited=${CAELESTIA_CHILD_ENV-}
+    local re="\"$name\":(null|\"([^\"\\\\]*)\")"
+    if [[ -n $inherited && $inherited =~ $re ]]; then
+        [[ ${BASH_REMATCH[1]} == null ]] && { echo null; return; }
+        json_value "${BASH_REMATCH[2]}"; return
+    fi
+    if [[ -v $name ]]; then
+        # Üres dekóderlistát csak a régi shell-restart hagyott a gyerekekben
+        if [[ $name == QT_FFMPEG_DECODING_HW_DEVICE_TYPES && -z ${!name} ]]; then echo null; return; fi
+        json_value "${!name}"
+    else
+        echo null
+    fi
+}
+child_env="{\"LIBVA_DRIVER_NAME\":$(session_value LIBVA_DRIVER_NAME),\"QT_FFMPEG_DECODING_HW_DEVICE_TYPES\":$(session_value QT_FFMPEG_DECODING_HW_DEVICE_TYPES)}"
+
+video_env=(QT_FFMPEG_DECODING_HW_DEVICE_TYPES="$hwdec" CAELESTIA_CHILD_ENV="$child_env")
+case $hwdec in
+    vaapi) video_env+=(LIBVA_DRIVER_NAME=iHD); echo "  ${C_D}videó-dekódolás: VA-API, Intel iGPU ($intel_node, iHD)${C_0}" ;;
+    "")    echo "  ${C_D}videó-dekódolás: szoftveres${C_0}" ;;
+    *)     echo "  ${C_D}videó-dekódolás: $hwdec${C_0}" ;;
+esac
 if command -v coredumpctl >/dev/null 2>&1; then
     crashes=$( { coredumpctl list --no-legend --no-pager -q --since "-10min" /usr/bin/quickshell 2>/dev/null || true; } | wc -l)
     if [[ ${crashes:-0} -ge 2 ]]; then

@@ -171,11 +171,14 @@ qml_path=""
 # Videós háttér: a Qt FFmpeg-backendje szoftveresen dekódol (üres eszközlista),
 # így a háttérvideó nem használja sem az NVIDIA NVDEC-et, sem a VA-API-t. A shell
 # a kijelzőre átkódolt másolatot játssza (custom/wallpaper/video-native.sh),
-# ennek a dekódolása kevés CPU. Felülírható: CAELESTIA_VIDEO_HWDEC=vaapi|cuda.
+# ennek a dekódolása egy CPU-mag kb. 30-40 %-a. Felülírható: CAELESTIA_VIDEO_HWDEC=vaapi (Intel
+# iGPU; ilyenkor LIBVA_DRIVER_NAME=iHD is kell, és ezt a launcherből indított
+# appok is megkapják) vagy CAELESTIA_VIDEO_HWDEC=cuda (NVIDIA NVDEC).
 #
 # Ha a shell az elmúlt 10 percben legalább kétszer összeomlott, videó nélkül indul
 # (CAELESTIA_VIDEO_WALLPAPER=0: a poszter marad), és szól róla.
 video_env=(QT_FFMPEG_DECODING_HW_DEVICE_TYPES="${CAELESTIA_VIDEO_HWDEC-}")
+if [[ ${CAELESTIA_VIDEO_HWDEC-} == vaapi ]]; then video_env+=(LIBVA_DRIVER_NAME=iHD); fi
 if command -v coredumpctl >/dev/null 2>&1; then
     crashes=$( { coredumpctl list --no-legend --no-pager -q --since "-10min" /usr/bin/quickshell 2>/dev/null || true; } | wc -l)
     if [[ ${crashes:-0} -ge 2 ]]; then
